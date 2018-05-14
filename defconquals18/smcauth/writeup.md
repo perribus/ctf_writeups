@@ -36,7 +36,7 @@ This is the state right before a call to decrypt:
 This is right after it tries and fails to decrypt an incorrect entry in a gate's truth table:
 ![](https://krx.re/u/b72b7b2a4c63b7b0e0730b328c69e1a4b45ef4e2.png)
 
-The 8 QWORDS being printed at the bottom are the output from the failed encryption. Notice how the third line has bits with not obvious pattern. 
+The 8 QWORDS being printed at the bottom are the output from the failed encryption. Notice how the third line has bits without obvious pattern. 
 
 The following two states are it right after it succeeds in decrypting an correct entry in a gate's truth table. As one can see, the third line has padding 0x1010... This allows us to identify it as a successful decryption. 
 
