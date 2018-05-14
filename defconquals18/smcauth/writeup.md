@@ -48,7 +48,7 @@ This is an example of output when the two inputs had different values:
 
 This is where we noticed something interesting. In the output with same valued inputs (regardless of gate), the second line has bytes of no obvious pattern, but in the output with different valued inputs (again, regardless of gate) the second line has null bytes. This behavior was unexpected, and seems pretty intentional (to save us the trouble of having to reverse the circuit). It would appear that the output labels of the garbled circuits aren't wholly randomly generated , but contain bytes that depend on the inequality of the input (this, in addition to the repeated use of the garbled circuit, would also negate its security). 
 
-From here, the challenge was easy. For each run collected the decrypted output for each gate, we marked the ones with null bytes (differently valued inputs) as 0 and the ones without (same valued inputs) as 1, and added these bits together. We brute forced the characters of the server secret by attempting to maximize this summation. Our (crappy) code is below:
+From here, the challenge was easy. For each run collected the decrypted output for each gate, we marked the gate outputs with null bytes (differently valued inputs) as 0 and the gate outputs without (same valued inputs) as 1, and added these bits together. We brute forced the characters of the server secret by attempting to maximize this summation. Our (crappy) code is below:
 
 ```py
 #!/usr/bin/env python2
