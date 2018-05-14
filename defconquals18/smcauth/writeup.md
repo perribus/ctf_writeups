@@ -2,8 +2,8 @@ solved by Perri Adams, Kareem El-Faramawi, Avi Weinstock
 
 ![](http://perrib.us/0/eb0b7ea62df475656fcc8916a87306a89929fb00.png)
 
-ELF (TODO add file)
-Verilog (TODO add file)
+[ELF](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
+[Verilog](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
 
 ### Description
 This was a pretty difficult crypto challenge that ended up involving some reverse engineering. [It took a while to get any solves](https://twitter.com/oooverflow/status/995743769726042112), we got it third. Thanks to @nullptr for what turned out to be a really fun challenge (and thanks for not giving in and giving us source :> )
