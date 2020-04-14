@@ -1,10 +1,11 @@
-### by Perri Adams, Kareem El-Faramawi, Avi Weinstock
+### Writeup by Perri Adams, Kareem El-Faramawi, Avi Weinstock
 
 ![](http://perrib.us/0/eb0b7ea62df475656fcc8916a87306a89929fb00.png)
 
-### ELF: 
+### Files
+*ELF:* 
 [ELF](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
-### Verilog:
+*Verilog:*
 [Verilog](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
 
 ### Description
