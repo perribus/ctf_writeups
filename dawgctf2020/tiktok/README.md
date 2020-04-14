@@ -25,6 +25,8 @@ tiktok: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked,
 
 + **`libc-2.27.so`**
 
+This is the version of libc the challenge server is using. 
+
 + ***`Animal/*, Warrior/*, Cannibal/*, Rainbow/*`***
 
 Four folders for each of Kesha's albums, which contain their respective songs as `.txt` files, each beginning with the length of the song in bytes. For example
