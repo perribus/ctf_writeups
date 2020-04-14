@@ -25,7 +25,6 @@ tiktok: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked,
 
 Four folders for each of Kesha's albums, which contain their respective songs as `.txt` files, each beginning with the length of the song in bytes. For example
 ```
-➜  tiktok cat Animal/tiktok.txt
 2117
 Wake up in the morning feeling like P Diddy (Hey, what up girl?)
 Grab my glasses, I'm out the door; I'm gonna hit this city (Let's go)
