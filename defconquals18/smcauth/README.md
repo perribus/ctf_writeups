@@ -3,9 +3,9 @@
 ![](http://perrib.us/0/eb0b7ea62df475656fcc8916a87306a89929fb00.png)
 
 ### Files
-*ELF:* 
+**ELF**
 [ELF](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
-*Verilog:*
+**Verilog**
 [Verilog](https://github.com/perribus/ctf_writeups/blob/master/defconquals18/smcauth/smcauth)
 
 ### Description
