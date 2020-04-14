@@ -82,14 +82,14 @@ Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's f
 
 Now that the ambiance is set, we can look at the strtoks. The first strtok scans the `song_file_path` to find a token ending in the `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte afterwhich the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a '.' character, at which point it replaces that '.' with a nullbyte and returns a pointer to the beginning of the song name. 
 
-This is all just a very verbose way of saying that it parses the parent directory and song name into seperate strings, stripping off the '/' and '.txt'. 
-i.e. 
-`songs[i].song_file_path = "Animal/tiktok.txt"` 
-will become 
-`songs[i].song_file_path = "Animal<0x00>tiktok<0x00>txt"`
-and
-`songs[i].song_dirname_ptr = &hacky_dir_reference + 7*i` points to 'Animmal' 
-and `songs[i].song_name_ptr = &hacky_name_no_reference + 7*i` points to 'tiktok'. 
+This is all just a very verbose way of saying that it parses the parent directory and song name into seperate strings, stripping off the '/' and '.txt'.  
+i.e. for `songs[i].song_file_path = "Animal/tiktok.txt"`
+```
+songs[i].song_file_path = "Animal" + 0x00 + "tiktok" + 0x00 + "txt"
+
+songs[i].song_dirname_ptr = &hacky_dir_reference + 7*i -> 'Animmal' 
+songs[i].song_name_ptr = &hacky_name_no_reference + 7*i -> 'tiktok'
+```
 
 Now this all becomes very interesting when you realize two things. 
 
