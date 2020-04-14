@@ -4,7 +4,11 @@
 
 ### Challenge Files
 
+We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
+
 +  **`tiktok`**
+
+This is an x86 ELF executable. 
 
 ```
 ➜ file tiktok
@@ -21,7 +25,7 @@ tiktok: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked,
 
 + **`libc-2.27.so`**
 
-+ ***`Animal/, Warrior/, Cannibal/, Rainbow/`***
++ ***`Animal/*, Warrior/*, Cannibal/*, Rainbow/*`***
 
 Four folders for each of Kesha's albums, which contain their respective songs as `.txt` files, each beginning with the length of the song in bytes. For example
 ```
