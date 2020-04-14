@@ -111,7 +111,7 @@ What can we do with this behavior? First we need to put on [Woman](https://www.y
 
 If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk (if `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
 
-Before we move on to exploitation, let's put on [more Ke$has](youtube.com/watch?time_continue=4&v=sqV9iWiSWh8) and look at the last function of interest.
+Before we move on to exploitation, let's put on [more Ke$ha](youtube.com/watch?time_continue=4&v=sqV9iWiSWh8) and look at the last function of interest.
 
 #### Remove Song
 
