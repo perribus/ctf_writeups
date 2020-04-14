@@ -35,6 +35,11 @@ Before I leave, brush my teeth with a bottle of Jack
 ```
 
 ### Vulnerability 
+![import_song](https://www.dropbox.com/s/rlvv9nhr4w5n848/Screenshot%202020-04-13%2021.57.34.png?dl=0)
+![play_song](https://www.dropbox.com/s/mc4h9jhp5dkg89u/Screenshot%202020-04-13%2022.12.08.png?dl=0)
+![remove_song](https://www.dropbox.com/s/jv6se4koawdfa4d/Screenshot%202020-04-13%2022.05.43.png?dl=0)
+
+
 
 
 
