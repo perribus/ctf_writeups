@@ -1,6 +1,6 @@
 # Writeup for TikTok
 
-**_If you've ever wondered 'which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you._**
+**If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
 ### Challenge Files
 
