@@ -68,17 +68,17 @@ Below is the edited decompilation of `import_song`, the function that gets calle
 
 ![import_song](../../images/import_song.png)
 
-When `listoptions()` gets called it will `ls -R` the directory it's in. By netcatting into the challenge server, we can see the contents of the directory, which contains a `flag.txt` and the same song folders and files that we have. 
+When `listoptions()` gets called it will `ls -R` the directory it's in. If we netcat into the server running this challenge we can select `1. Import a Song to the Playlist` and the contents of the challenge's directory will get listed. Doing this shows it contains a `flag.txt` and the same song folders and files that we have. 
 
 From lines 20-24 we can see that the user supplies a file path that must exist, can't contain the strings `"flag"` and `".."` and must begin with a capital letter between A and Z (no absolute paths). Given the contents of the challenge directory, the only available option is to send a path of one of the song files, i.e. `<Album_Name>/<song_name>.txt` (*or* just the path of an album directory, i.e. `<Album_Name>/`, which will be relevant later). 
 
-The file path is getting read into an array of structs, which is our playlist of imported songs. Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast a `DWORD`, whereas everything else is a `QWORD` so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
+The file path is getting read into an array of structs, which is our playlist of imported songs. Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast as a `DWORD` pointer, whereas everything else is cast as a `QWORD` point so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
 
 ![song_struct](../../images/song_struct.png)
 
-The first 24 bytes of the struct is a 24 bytes array of the song file path. Directly below it is a 4 byte file descripter that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer pointer points will point at the file path, the second will point at the file name and the third will point into the heap (given intended program behavior). 
+The first 24 bytes of the struct is a 24 bytes array of the song file path. Directly below it is a 4 byte file descripter that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer will point at the file path, the second will point at the file name and the third will point into the heap (given intended program behavior). 
 
-Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's favorite libc function, [strtok](http://www.cplusplus.com/reference/cstring/strtok/). While my first instinct was to look there for vulnerabilities, that would be a rookie mistake. Clearly the first thing any good vulnerability researcher would do at this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
+Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's favorite libc function, [strtok](http://www.cplusplus.com/reference/cstring/strtok/). While my first instinct was to look there for vulnerabilities, that would be a rookie mistake. Clearly the first thing any good CTF player would do at this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
 
 Now that the ambiance is set, we can look at the strtoks. The first strtok scans the `song_file_path` to find a token ending in the `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte afterwhich the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a `.` character, at which point it replaces that `.` with a nullbyte and returns a pointer to the beginning of the song name. 
 
@@ -95,7 +95,7 @@ Now this all becomes very interesting when you realize two things.
 
 1) The `read` on line 10 reads in up to 24 bytes, exactly the size of `songs[i].song_file_path`. This means that if the user gives a filepath that is 24 bytes long, no null byte will be appended on the end. In each song struct, `songs[i].song_file_path`resides directly above `songs[i].fd` which brings me to 2). 
 
-2) The file descriptor being saved in the struct is already suspicious, and now looks even more so. The first three fds for a Linux process, fd = 0, 1, 2 will (unless otherwise specified) be assigned to stdin, stdout and stderr. So when `open` is called, it will assign a new fd to the file it's opening, beginning with fd = 3. Every time a song is imported a new fd is open, and won't get closed until the user chooses to remove the song. That means that were the user to import, say, 44 songs, `songs[43].fd = 46`, which just so happens to be the ASCII code for `.`.
+2) The file descriptor being saved in the struct is already suspicious, and now looks even more so. The first three fds for a Linux process, fd = 0, 1, 2 will (unless otherwise specified) be assigned to stdin, stdout and stderr. So when `open` is called, it will assign a new fd to the file it's opening, beginning with fd = 3. Every time a song is imported a new fd is opened for it, and won't get closed until the user chooses to remove the song. That means that were the user to import, say, 44 songs, `songs[43].fd = 46`, which just so happens to be the ASCII code for `.`.
 ```
 ➜  python3
 >>> chr(46)
@@ -109,7 +109,7 @@ What can we do with this behavior? First we need to put on [Woman](https://www.y
 
 ![play_song](../../images/play_song.png)
 
-If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk (if `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
+If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk. If `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes (the value will wrap around to MAXINT). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
 
 Before we move on to exploitation, let's put on [more Ke$ha](youtube.com/watch?time_continue=4&v=sqV9iWiSWh8) and look at the last function of interest.
 
@@ -172,7 +172,7 @@ At the end of execution, here is what the song struct array looks like. For the 
 
 ![normal_song_struct](../../images/normal_song_struct.png)
 
-This has been given 19 as its file descriptor at 0x404548. The lyrics pointer at the bottom is null because the song hasn't been played yet. Now let's look at our 44th song:
+This has been given 19 as its file descriptor at 0x404548. The lyrics pointer at the bottom is null because the song hasn't been played yet. Now let's look at song #44:
 
 ![song_struct_44](../../images/song_struct_44.png)
 
@@ -184,7 +184,8 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
-[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
+[This](https://syedfarazabrar.com/2019-10-12-pico
+-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
 Below is an allocated chunk on the heap. AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). The top two sections are part of the chunk's header. After this is the actual stored in the chunk and this is where the pointer malloc returns will point.
 
@@ -206,28 +207,46 @@ addr of B   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 [Source](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/)
 
-When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with A as the head element, it may look like this:
+When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with X as the head element, it may look like this:
 
 ```
- chunk X    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk A
-            | Size of previous chunk (if P = 0)   |            | Size of previous chunk (if P = 0)   |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            | Size of chunk X               |A|M|P|            | Size of chunk A               |A|M|P|
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-tc bin ->   | Pointer to next chunk in tcache bin |   ---->    | Null (no next element)              |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            .                                     .            .                                     .
-            . Unused space                        .            . Unused space                        .
-            .                                     |            .                                     |
-chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk B 
-            | Size of chunk X                     |            | Size of chunk A                     |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            | Size of chunk Y               |A|M|0|            | Size of chunk B               |A|M|0|
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ chunk X    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
+            | Size of previous chunk (if P = 0)   |           
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
+            | Size of chunk X               |A|M|P|          
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+          
+tc bin ->   | Pointer to next chunk in tcache bin | ----+
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |          
+            .                                     .     |   
+            . Unused space                        .     |    
+            .                                     |     |       
+chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
+            | Size of chunk X                     |     |     
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
+            | Size of chunk Y               |A|M|0|     |      
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |     
+                              .                         |
+                              .                         |
+                              .                         |
+  chunk A   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
+            | Size of previous chunk (if P = 0)   |     |      
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |    
+            | Size of chunk X               |A|M|P|     |      
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
+tc bin ->   | Null (no next element)              |  <--+  
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+          
+            .                                     .           
+            . Unused space                        .          
+            .                                     |         
+chunk B     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            
+            | Size of chunk X                     |           
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
+            | Size of chunk Y               |A|M|0|            
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
 ```
 Tcache bins are, for lack of a better term, **dumb**. If you overwrite the pointer of a chunk, let's say chunk X, in the tcache with your own address, when chunk X is the head of tcache bin and then gets reallocated, the tcache bin will think its _new_ head is whatever is at the address you wrote, _even if it's not on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
 
-Let's say the chunk we're allocating is chunk W and we position this on top of chunk X. Even though we called malloc(0), chunk W will have a size of 0x20 (the smallest possible heap chunk). We overwrite the header of chunk X to have the same values it had before, and then overwrite the address with our new address. If we wanted to overwrite another song's file descripter with 0, we can point it at the address of `songs[i].fd`. 
+Let's say we first free chunk X so it ends up at the top the tcache bin for its size (in this case let's say 0x20). If playing song #44 allocates a chunk W right above chunk X, then we can overwrite the tcache next pointer of chunk X. When we play song #44 we call malloc(0), which (perhaps unintuitively) means chunk W will have a size of 0x20 (the smallest possible heap chunk). We pass in overwrite the header of chunk X to have the same values it had before, and then overwrite the address with our new address. If we wanted to overwrite another song's file descripter with 0, we can point it at the address of `songs[i].fd`. 
 
 ```
  chunk W    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    
@@ -260,7 +279,7 @@ chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+
                                     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
                         
 ```
-
+Now when chunk X gets allocated and taken off
 
 If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
