@@ -72,7 +72,7 @@ When `listoptions()` gets called it will `ls -R` the directory it's in. If we ne
 
 From lines 20-24 we can see that the user supplies a file path that must exist, can't contain the strings `"flag"` and `".."` and must begin with a capital letter between A and Z (no absolute paths). Given the contents of the challenge directory, the only available option is to send a path of one of the song files, i.e. `<Album_Name>/<song_name>.txt` (*or* just the path of an album directory, i.e. `<Album_Name>/`, which will be relevant later). 
 
-The file path is getting read into an array of structs, which is our playlist of imported songs. Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast as a `DWORD` pointer, whereas everything else is cast as a `QWORD` point so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
+The file path is getting read into an global array of structs, which is our playlist of imported songs. This is stored in the `.bss` section, which is readable and writeable (but not executeable). Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast as a `DWORD` pointer, whereas everything else is cast as a `QWORD` point so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
 
 ![song_struct](../../images/song_struct.png)
 
@@ -96,7 +96,7 @@ Now this all becomes very interesting when you realize two things.
 1) The `read` on line 10 reads in up to 24 bytes, exactly the size of `songs[i].song_file_path`. This means that if the user gives a filepath that is 24 bytes long, no null byte will be appended on the end. In each song struct, `songs[i].song_file_path`resides directly above `songs[i].fd` which brings me to 2). 
 
 2) The file descriptor being saved in the struct is already suspicious, and now looks even more so. The first three fds for a Linux process, fd = 0, 1, 2 will (unless otherwise specified) be assigned to stdin, stdout and stderr. So when `open` is called, it will assign a new fd to the file it's opening, beginning with fd = 3. Every time a song is imported a new fd is opened for it, and won't get closed until the user chooses to remove the song. That means that were the user to import, say, 44 songs, `songs[43].fd = 46`, which just so happens to be the ASCII code for `.`.
-```
+```python
 ➜  python3
 >>> chr(46)
 '.'
@@ -182,105 +182,132 @@ Where there's a 19 in the first struct, there's a 0 in this one where there shou
 
 Great, we have a heap overflow! The size of the top chunk has been overwritten with `A`. Now we have to make this useful somehow. 
 
+### What even is a tcache? 
+
 Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
 [This](https://syedfarazabrar.com/2019-10-12-pico
 -2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
-Below is an allocated chunk on the heap. AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). The top two sections are part of the chunk's header. After this is the actual stored in the chunk and this is where the pointer malloc returns will point.
+Below is a diagram of an allocated chunk on the heap. The first 16 bytes of a chunk (the first and second row) are part of the chunk's 'header'. If the previous chunk is freed, the first 8 bytes contain the size of the previous chunk. The second 8 bytes then contain the chunk's own size. After the header is where the chunk's data is stored. This is where the address of the chunk begins (and where the pointer returned by malloc will point). When a chunk is allocated, it uses the top 8 bytes of the next chunk's header as part of its data space. 
+
+```     
+                <--------------------------- 8 bytes --------------------------->
+
+     chunk B    +- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+
+                | Size of previous chunk, if unallocated (P = 0)                |
+                +---------------------------------------------------------------+
+                | Size of chunk B, in bytes                               |A|M|P|
+address of B -> +---------------------------------------------------------------+   --+
+                | Chunk B data                                                  |     |   
+                .                                                               .     |
+                .                                                               .     |___ chunk B's usable data  
+                .                                                               .     |    space when in use
+     chunk C    +- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+     |    (malloc_usable_size() bytes)
+                | Size of chunk B if B is freed, otherwise used for chunk B data|     |
+                +---------------------------------------------------------------+   --+
+                | Size of chunk C, in bytes                               |A|M|1|
+address of C -> +---------------------------------------------------------------+
 
 ```
-chunk A     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            |             Size of previous chunk, if unallocated (if P = 0) |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            |             Size of chunk, in bytes                     |A|M|P|
-addr of A   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            |             chunk A data starts here...                       .   
-            .                                                               .
-            .             (malloc_usable_size() bytes)                      .
-            .                                                               |
-chunk B     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            |             (size of chunk, but used for application data)    |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            |             Size of next chunk, in bytes                |A|M|1|
-addr of B   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-```
-[Source](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/)
 
-When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with X as the head element, it may look like this:
+
+AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
+
+When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with X as the head element, it may look like this
 
 ```
- chunk X    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
-            | Size of previous chunk (if P = 0)   |           
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
-            | Size of chunk X               |A|M|P|          
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+          
-tc bin ->   | Pointer to next chunk in tcache bin | ----+
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |          
-            .                                     .     |   
-            . Unused space                        .     |    
-            .                                     |     |       
-chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
-            | Size of chunk X                     |     |     
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
-            | Size of chunk Y               |A|M|0|     |      
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |     
-                              .                         |
-                              .                         |
-                              .                         |
-  chunk A   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
-            | Size of previous chunk (if P = 0)   |     |      
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |    
-            | Size of chunk X               |A|M|P|     |      
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     |      
-tc bin ->   | Null (no next element)              |  <--+  
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+          
-            .                                     .           
-            . Unused space                        .          
-            .                                     |         
-chunk B     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            
-            | Size of chunk X                     |           
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
-            | Size of chunk Y               |A|M|0|            
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+           
+ (free)
+ chunk B    +- - - - - - - - - - - - - - - - - - - - - - - - - -+           
+            | Size of prev chunk, if unallocated (P = 0)        |           
+            +---------------------------------------------------+         
+            | Size of chunk B                             |A|M|P|             
+            +---------------------------------------------------+           
+tc bin ->   | Pointer to next chunk in tcache bin               | --->
+            +-    -    -    -    -    -    -    -    -    -    -+     |          
+            .                                                   .     |      
+            . Unused space                                      .     |           
+            .                                                   .     |       
+chunk C     +- - - - - - - - - - - - - - - - - - - - - - - - - -+     |      
+            | Unused space (chunk C in tcache so still "in use")|     |     
+            +---------------------------------------------------+     |      
+            | Size of chunk C                             |A|M|0|     |      
+            +---------------------------------------------------+     |   
+                                                                      |
+            ~                                                   ~     |
+            ~                                                   ~     |
+            ~                                                   ~     |
+ (free)                                                               |
+ chunk X -- +- - - - - - - - - - - - - - - - - - - - - - - - - -+     |      
+            | Size of prev chunk (if unallocated)               |     |      
+            +---------------------------------------------------+     |    
+            | Size of chunk X                             |A|M|P|     |      
+            +---------------------------------------------------+     V      
+tc bin ->   | Null pointer (no next tcache element)             |  <--
+            +-    -    -    -    -    -    -    -    -    -    -+                                                  |          
+            .                                                   .           
+            . Unused space                                      .                
+            .                                                   .          
+ chunk Y    +- - - - - - - - - - - - - - - - - - - - - - - - - -+             
+            | Unused space (chunk X in tcache so still "in use")|           
+            +---------------------------------------------------+           
+            | Size of chunk Y                             |A|M|0|            
+            +---------------------------------------------------+           
 ```
-Tcache bins are, for lack of a better term, **dumb**. If you overwrite the pointer of a chunk, let's say chunk X, in the tcache with your own address, when chunk X is the head of tcache bin and then gets reallocated, the tcache bin will think its _new_ head is whatever is at the address you wrote, _even if it's not on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
+Tcache bins are, for lack of a better term, **dumb**. If chunk B is in the tcache and you overwrite the pointer to the next tcache chunk with your own address, when chunk B is at the head of tcache bin and then gets reallocated the tcache think its _new_ head is whatever is at the address you overwrote. _It doesn't even check if that new address is on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
 
-Let's say we first free chunk X so it ends up at the top the tcache bin for its size (in this case let's say 0x20). If playing song #44 allocates a chunk W right above chunk X, then we can overwrite the tcache next pointer of chunk X. When we play song #44 we call malloc(0), which (perhaps unintuitively) means chunk W will have a size of 0x20 (the smallest possible heap chunk). We pass in overwrite the header of chunk X to have the same values it had before, and then overwrite the address with our new address. If we wanted to overwrite another song's file descripter with 0, we can point it at the address of `songs[i].fd`. 
+Let's say we we have allocated a `chunk A` right on top of `chunk B`, both with size 0x20. We first free `chunk B` and it ends up in the tcache for size 0x20, which previously contained `chunk X` at it's head:
 
 ```
- chunk W    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    
-            | Size of previous chunk (if P = 0)     |          
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     
-            | 0x21 (Size of 0x20 + |0|0|1|)         |           
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+++  
-            | This is where our data will start     |          
-            | <0x0000000000000000>                  |      
-            | <0x0000000000000000>                  |                  
-chunk X     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk A
-            | <0x0000000000000000>                  |            | Size of previous chunk (if P = 0)   |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            | <0x0000000000000021> (size of chunk X)|            | Size of chunk A               |A|M|
-tc bin      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-for 0x20 -> | <0x0000000000404078>                  |  ___       | Null (no next element)              |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            .                                       .    |       .                                     .
-            . Unused space                          .    |       . Unused space                        .
-            .                                       |    |       .                                     |
-chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk B
-            | Size of chunk X                       |    |       | Size of chunk A                     |
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            | Size of chunk Y                 |A|M|0|    |       | Size of chunk B               |A|M|0|
-            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-                                                         |
-                                                         V     
-                                    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    
-                  addr = 0x404078   |                songs[0].fd            |          
-                                    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+tcache bin 0x20 -> chunk B -> chunk X -> null
+```
+Then we free `chunk A` and it ends up in the same bin: 
+
+```
+tcache bin 0x20 -> chunk A -> chunkB -> chunk X -> null
+```
+When we play song #44 we are calling malloc(0). Even though we're asking for 0 bytes, this means chunk W will have a size of 0x20 (the smallest possible heap chunk). The heap manager will see that the tcache bin for 0x20 isn't empty, so it take the first chunk, `chunk A`, and return a pointer to the data section of `chunk A`. Now our tcache bin looks like this: 
+
+```
+tcache bin 0x20 -> chunk B -> chunk X -> null
+```
+Next the program reads MAXINT bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section _not the heap_). Specifically we can point it at its file descriptor, `songs[0].fd`. 
+
+```
+
+       chunk A  +- - - - - - - - - - - - - - - - - - - - - - - - - - -+           
+                | Size of prev chunk, if unallocated (P = 0)          |           
+                +-----------------------------------------------------+         
+We start        | 0x21 = 0x20 + 0001b = Size of A (0x20) + AMP (0|0|1)|            
+writing here -> +-----------------------------------------------------+           
+                | <0x0000000000000000>                                |
+                +                                                     +
+                | <0x0000000000000000>                                |            
+(free) chunk B  +- - - - - - - - - - - - - - - - - - - - - - - - - - -+           
+                | <0x0000000000000000>                                |           
+                +-----------------------------------------------------+         
+                | <0x0000000000000021> Size of B (0x20) + AMP (0|0|1) |         addr = 0x404078
+                +-----------------------------------------------------+         +---------------+      
+      tc bin -> | <0x0000000000404078>                                | ----->  |songs[0].fd = 3|
+                + -    -    -    -    -    -    -    -    -    -    - +         +---------------+     
+                |                                                     |                    
+      chunk C   +- - - - - - - - - - - - - - - - - - - - - - - - - - -+            
+                | Unused space (chunk C in tcache so still "in use"   |           
+                +-----------------------------------------------------+            
+                | Size of chunk C                               |A|M|P|            
+                +-----------------------------------------------------+
+
                         
 ```
-Now when chunk X gets allocated and taken off
+When we next play a song of size 0 the program will call `malloc(0)` again, and the heap manager will give us the next chunk in its tcache bin for 0x20, `chunk B`. When it removes `chunk B`, it will take the pointer we overwrote in B, and make that the new head element:
+```
+tcache bin 0x20 ->  0x404078
+```
+Now when we play anotherr song of size 0, the heap manager will give us 0x404078!
 
+### Now let's clobber some Ke$ha songs (structs)
+
+What does this look like within the actual program? 
 If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
 
