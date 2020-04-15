@@ -172,7 +172,7 @@ At the end of execution, here is what the song struct array looks like. For the 
 
 ![normal_song_struct](../../images/normal_song_struct.png)
 
-This has been given 19 as its file descriptor at 0x404548. Now let's look at our 44th song:
+This has been given 19 as its file descriptor at 0x404548. The lyrics pointer at the bottom is null because the song hasn't been played yet. Now let's look at our 44th song:
 
 ![song_struct_44](../../images/song_struct_44.png)
 
@@ -180,10 +180,32 @@ Where there's a 19 in the first struct, there's a 0 in this one where there shou
 
 ![heap_overflow](../../images/heap_overflow.png) 
 
-Great, we have a heap overflow! 
+Great, we have a heap overflow! The size of the top chunk has been overwritten with `A`. Now we have to make this useful somehow. 
 
+Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
+[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great detailed writeup of tcache attacks. 
 
+When a chunk is added to a tcache bin, 
+>
+>    ```
+>    chunk-----> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>                |             Size of previous chunk, if unallocated (P clear)  |
+>                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>                |             Size of chunk, in bytes                     |A|M|P|
+>    mem-------> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>                |             User data starts here...                          .
+>                .                                                               .
+>                .             (malloc_usable_size() bytes)                      .
+>                .                                                               |
+>    nextchunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>                |             (size of chunk, but used for application data)    |
+>                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>                |             Size of next chunk, in bytes                |A|0|1|
+>                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+>    ```
+
+I'm not going to go too in depth on tcache attacks here, but if you're interested in knowing more, Azeria's [post](https://github.com/shellphish/how2heap) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
 
 
