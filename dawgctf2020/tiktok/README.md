@@ -184,7 +184,7 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
-[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I'm borrowing below with some light adaptation.
+[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
 Below is an allocated chunk on the heap. AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). The top two sections are part of the chunk's header. After this is the actual stored in the chunk and this is where the pointer malloc returns will point.
 
@@ -204,7 +204,7 @@ chunk B     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             |             Size of next chunk, in bytes                |A|M|1|
 addr of B   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
-
+[Source](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/)
 
 When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with A as the head element, it may look like this:
 
