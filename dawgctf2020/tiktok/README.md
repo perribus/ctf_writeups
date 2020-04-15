@@ -184,28 +184,85 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
-[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great detailed writeup of tcache attacks. 
+[This](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I'm borrowing below with some light adaptation.
 
-When a chunk is added to a tcache bin, 
->
->    ```
->    chunk-----> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->                |             Size of previous chunk, if unallocated (P clear)  |
->                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->                |             Size of chunk, in bytes                     |A|M|P|
->    mem-------> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->                |             User data starts here...                          .
->                .                                                               .
->                .             (malloc_usable_size() bytes)                      .
->                .                                                               |
->    nextchunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->                |             (size of chunk, but used for application data)    |
->                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->                |             Size of next chunk, in bytes                |A|0|1|
->                +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
->    ```
+Below is an allocated chunk on the heap. AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). The top two sections are part of the chunk's header. After this is the actual stored in the chunk and this is where the pointer malloc returns will point.
 
-I'm not going to go too in depth on tcache attacks here, but if you're interested in knowing more, Azeria's [post](https://github.com/shellphish/how2heap) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
+```
+chunk A     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Size of previous chunk, if unallocated (if P = 0) |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Size of chunk, in bytes                     |A|M|P|
+addr of A   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             chunk A data starts here...                       .   
+            .                                                               .
+            .             (malloc_usable_size() bytes)                      .
+            .                                                               |
+chunk B     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             (size of chunk, but used for application data)    |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Size of next chunk, in bytes                |A|M|1|
+addr of B   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+
+When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with A as the head element, it may look like this:
+
+```
+ chunk X    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk A
+            | Size of previous chunk (if P = 0)   |            | Size of previous chunk (if P = 0)   |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            | Size of chunk X               |A|M|P|            | Size of chunk A               |A|M|P|
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+tc bin ->   | Pointer to next chunk in tcache bin |   ---->    | Null (no next element)              |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            .                                     .            .                                     .
+            . Unused space                        .            . Unused space                        .
+            .                                     |            .                                     |
+chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk B 
+            | Size of chunk X                     |            | Size of chunk A                     |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            | Size of chunk Y               |A|M|0|            | Size of chunk B               |A|M|0|
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+Tcache bins are, for lack of a better term, **dumb**. If you overwrite the pointer of a chunk, let's say chunk X, in the tcache with your own address, when chunk X is the head of tcache bin and then gets reallocated, the tcache bin will think its _new_ head is whatever is at the address you wrote, _even if it's not on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
+
+Let's say the chunk we're allocating is chunk W and we position this on top of chunk X. Even though we called malloc(0), chunk W will have a size of 0x20 (the smallest possible heap chunk). We overwrite the header of chunk X to have the same values it had before, and then overwrite the address with our new address. If we wanted to overwrite another song's file descripter with 0, we can point it at the address of `songs[i].fd`. 
+
+```
+ chunk W    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    
+            | Size of previous chunk (if P = 0)     |          
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     
+            | 0x21 (Size of 0x20 + |0|0|1|)         |           
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+++  
+            | This is where our data will start     |          
+            | <0x0000000000000000>                  |      
+            | <0x0000000000000000>                  |                  
+chunk X     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk A
+            | <0x0000000000000000>                  |            | Size of previous chunk (if P = 0)   |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            | <0x0000000000000021> (size of chunk X)|            | Size of chunk A               |A|M|
+tc bin      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+for 0x20 -> | <0x0000000000404078>                  |  ___       | Null (no next element)              |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            .                                       .    |       .                                     .
+            . Unused space                          .    |       . Unused space                        .
+            .                                       |    |       .                                     |
+chunk Y     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ chunk B
+            | Size of chunk X                       |    |       | Size of chunk A                     |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            | Size of chunk Y                 |A|M|0|    |       | Size of chunk B               |A|M|0|
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    |       -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                                         |
+                                                         V     
+                                    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+    
+                  addr = 0x404078   |                songs[0].fd            |          
+                                    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+                        
+```
+
+
+If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
 
 
