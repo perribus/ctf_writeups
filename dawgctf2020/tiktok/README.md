@@ -164,7 +164,7 @@ p.send("A" * 100)
 
 p.interactive()
 ```
-To make it easier, I defined a couple helper functions from the start. I'm also running the binary with [https://rr-project.org](https://rr-project.org/) which is great, and I highly recommend. It records the execution and allows you to step through it as you would in gdb normally (with gef/peda/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. As I said, it's amazing. 
+To make it easier, I defined a couple helper functions from the start. I'm also running the binary with [https://rr-project.org](https://rr-project.org/) which is great, and I highly recommend it. It records the execution and allows you to step through it as you would in gdb normally (with gef/peda/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. 
 
 I imported 43 songs normally and for the 44th one, I gave it the file path `Cannibal////////////////` since the name must be 24 bytes without any '.' for this to work. Then I play that song, giving it -1 as a file size and a bunch of 'A's. Let's see what happens in rr/gdb/gef. 
 
@@ -172,11 +172,11 @@ At the end of execution, here is what the song struct array looks like. For the 
 
 ![normal_song_struct](../../images/normal_song_struct.png)
 
-This has been given 19 as its file descriptor. Now let's look at our 44th song:
+This has been given 19 as its file descriptor at 0x404548. Now let's look at our 44th song:
 
 ![song_struct_44](../../images/song_struct_44.png)
 
-Where there's a 19 in the first struct, there's a 0 in this one where there should be a 46, and the lyrics pointer to the heap at the bottom of the struct looks promising. Let's see what our heap looks like: 
+Where there's a 19 in the first struct, there's a 0 in this one where there should be a 46 (at 0x4049e0), and the lyrics pointer to the heap at the bottom of the struct looks promising. Let's see what our heap looks like: 
 
 ![heap_overflow](../../images/heap_overflow.png)
 
