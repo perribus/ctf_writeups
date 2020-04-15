@@ -178,7 +178,7 @@ This has been given 19 as its file descriptor at 0x404548. Now let's look at our
 
 Where there's a 19 in the first struct, there's a 0 in this one where there should be a 46 (at 0x4049e0), and the lyrics pointer to the heap at the bottom of the struct looks promising. Let's see what our heap looks like: 
 
-![heap_overflow](../../images/heap_overflow.png)
+![heap_overflow](../../images/heap_overflow.png) 
 
 Great, we have a heap overflow! 
 
