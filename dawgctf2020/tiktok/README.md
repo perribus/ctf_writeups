@@ -8,7 +8,7 @@ We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha 
 
 +  **`tiktok`**
 
-This is an x86 ELF executable. 
+The challenge binary 
 
 ```
 ➜ file tiktok
