@@ -2,9 +2,9 @@
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
-This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a clever vuln and then forces CTF players to wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
+This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a cool vuln and then makes CTF players wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
 
-I was originally going to do a quick writeup just because when are you ever going to do a Ke$ha-themed CTF challenge? But I ended up making it more in depth so that someone with little to no pwning or heap experience could understand well enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain things :). 
+I was originally going to do a quick writeup just because when are you ever going to do a Ke$ha-themed CTF challenge? But I ended up making it more in depth so that someone with little to no pwning or heap experience could understand it well enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may get too in the weeds, or overly explain things :)
 
 However, by reading this you are contractually required to appreciate my Ke$ha puns, sorry no refunds. 
 
@@ -78,7 +78,7 @@ Next we decompile the binary. Option 2 and 5 are rather straightforward (2 outpu
 
 Below is the edited decompilation of `import_song`, the function that gets called when selecting Option 1. 
 
-![import_song](../../images/import_song.png)
+![import_song](https://github.com/perribus/ctf_writeups/blob/master/images/import_song.png?raw=true)
 
 When `listoptions()` gets called it will `ls -R` the directory it's in. If we netcat into the server running this challenge we can select `1. Import a Song to the Playlist` and the contents of the challenge's directory will get listed. Doing this shows it contains a `flag.txt` and the same song folders and files that we have. 
 
@@ -91,7 +91,7 @@ Given the contents of the challenge directory, the only available option is to s
 
 The file path gets read into a global array of structs called `songs`: this is our "playlist" of songs that we have imported. This is stored in the `.bss` section, which is readable and writeable (but not executable). Each struct is 56 bytes long, with 7 fields. Below is what the song struct looks like. 
 
-![song_struct](../../images/song_struct.png)
+![song_struct](https://github.com/perribus/ctf_writeups/blob/master/images/song_struct.png?raw=true)
 
 The first 24 bytes of the struct is a 24 bytes array of the song file path. Directly below it is a 4 byte file descripter (fd) that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer will point at the file path, the second will point at the file name and the third will point into the heap (given intended program behavior). 
 
@@ -115,7 +115,7 @@ songs[i].song_name_ptr = &hacky_name_no_reference + 7*i -> 'tiktok'
 
 This functionality becomes very interesting when you realize a few things:
 
-1) **If `songs[i].song_file_path` is if 24 bytes it's not null terminated :** The `read` on line 10 reads in up to 24 bytes, exactly the size of `songs[i].song_file_path`. This means that if the user inputs a filepath that is 24 bytes long, no null byte will be appended on the end. 
+1) **If `songs[i].song_file_path` is 24 bytes long and/or doesn't end in a newline it's not null terminated :** The `read` on line 10 reads in up to 24 bytes, exactly the size of `songs[i].song_file_path`. This means that if the user inputs a filepath that is 24 bytes long, no null byte will be appended on the end. 
 
 2) **If `songs[i].song_file_path` is not null terminated, strtok() will treat the file descriptor as part of the string:** In each song struct, `songs[i].song_file_path`resides directly above `songs[i].fd`. `strtok()` will scan until it reaches a null character, and if none is found, it will continue searching into the next field of the struct, `songs[i].fd`.
 
@@ -131,17 +131,17 @@ What can we do with this behavior? We need to look at where the program reads fr
 
 ### Play Song
 
-![play_song](../../images/play_song.png)
+![play_song](https://github.com/perribus/ctf_writeups/blob/master/images/play_song.png?raw=true)
 
 If a song has not yet been played the program will read the lyrics in from its file descriptor. `play_song` first checks if the `lyrics_ptr_to_heap` field has been set (line 26). If not,`play_song` will read the first line of the file, which contains the file size. This goes in (`nbytes`). 
 
-As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. **If `play_song` reads from STDIN, we could input any "file size", including -1.** Then `play_song` will call `malloc(nbytes + 1)` . **If we were to input -1 as  `nbytes` then it would call `malloc(0)`.** It next calls `memset` on the allocated bytes, setting them to null. Then `nbytes` of data is read into the heap chunk. **If `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes (the value will wrap around to UINT_MAX).**
+As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. **If `play_song` reads from STDIN, we could input any "file size", including -1.** Then `play_song` will call `malloc(nbytes + 1)` . **If we were to input -1 as  `nbytes` then it would call `malloc(0)`.** Even though we're asking the heap manager for 0 bytes, we'll get a chunk of 0x20 bytes, the smallest possible chunk. `play_song` next calls `memset` on the allocated bytes, setting them to null. Then `nbytes` of data is read into the heap chunk. **If `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes (the value will wrap around to UINT_MAX).**
 
-**Reading in 0xFFFFFFFFFFFFFFFF  bytes from STDIN to a chunk of 0x20 bytes will result in a very large heap overflow, controlled by us. We can import 44 songs, and use the last one to overflow the heap.**
+**Reading in 0xFFFFFFFF(-1)  bytes from STDIN to a chunk of 0x20 bytes will result in a very large heap overflow, controlled by us. We can import 44 songs, and use the last one to overflow the heap.**
 
 ### Remove Song
 
-![remove_song](../../images/remove_song.png)
+![remove_song](https://github.com/perribus/ctf_writeups/blob/master/images/remove_song.png?raw=true)
 
 Option 4 allows a user to remove a song, which calls `free` on its lyrics pointer, closes its file descriptor and sets its pointers to null, . It doesn't decrement song count however (although this never matters). 
 
@@ -154,7 +154,7 @@ Option 4 allows a user to remove a song, which calls `free` on its lyrics pointe
 We can
 * __Overflow the heap__  
 * with a __large amount of data__
-* that __we input__.
+* that __we control__.
 
 But 
 *  we can only do this __one time__
@@ -165,35 +165,36 @@ We want the ability to write anything we want anywhere in (writeable) address sp
 
 Once we have this, we can overwrite some function pointer to point to `system()` and call that function pointer on the character array `"/bin/sh"` which will give us a shell. 
 
-__We are going to overwrite the `__free_hook`, a function pointer in libc that overrides the `free()` . Then we will call `free()` on a pointer that points to `"/bin/sh"`__. 
+__We are going to overwrite the `__free_hook`, a function pointer in libc that overrides the `free()` function. Then we will call `free()` on a pointer that points to `"/bin/sh"`__. 
 
 In order to do this we are going to need to figure out the address of libc by getting __a leak__. 
 
-We can achieve both our leak and overwriting a function pointer with arbitrary write. 
+We can get both our leak and function pointer overwrite using an arbitrary write. 
 
-So we
-1. __We get the ability to arbitrarily write in address space__
-2. __We get a leak to libc__
-3. __We overwrite the `__free_hook` with a pointer to `system()`__
-4. __Profit__
+### Our exploit
+1. __Get arbitrary write__
+2. __Get a leak to libc__
+3. __Overwrite the `__free_hook` with a pointer to `system()`__
+4.  __Call free() on a chunk that begins with `"/bin/sh\0"`__
+5. __Profit__
 
  ### Writing Arbitrarily 
 
 Here, an arbitrary write can be broken into two parts:
-1. __Writing anywhere (in writeable address space)__
-2. __Writing anything__
+* __Writing anywhere (in writeable address space)__
+* __Writing anything__
 
 __Writing Anywhere__ 
-We can achieve this by tricking the heap into allocating us a chunk anywhere we want in address space. We'll do this by tricking the tcache free lists, which will be explained in detail below. 
+We can achieve this by tricking the heap into allocating a chunk anywhere we want in the address space. We'll do this by tricking the tcache free lists, which will be explained in detail below. 
 
 __Writing Anything__ 
-Once we can __write anywhere__ we still won't have the ability to write whatever we want. But we can use this __write anywhere__ to put a heap chunk in the `songs` array to overwrite another file descriptor to 0.  Even though we still can't write whatever we want, `play_song` memsets allocated bytes to 0. 
+Once we can __write anywhere__ we still won't have the ability to write whatever we want. But we can use this __write anywhere__ to put a heap chunk in the `songs` array to overwrite another file descriptor to 0.  Even though we still can't write whatever we want, `play_song` `memset()`s the allocated bytes to 0. 
 
-__Once we have another song with a file descriptor of 0 we can chain this to our ability to allocate a heap chunk anywhere, giving us arbitrary write.__
+__Once we have another song with a file descriptor of 0 we can chain this with our ability to allocate a heap chunk anywhere, giving us our desired arbitrary write.__
 
 ## How many Ke$ha songs fit into a tcache bin?
 
-First, let's check to see if the vulnerability we found works.
+First, let's check if the vulnerability we found works the way we think.
 
 I'm using [pwntools]([https://github.com/Gallopsled/pwntools](https://github.com/Gallopsled/pwntools)) to write my exploit: 
 
@@ -245,25 +246,25 @@ To make it easier, I defined a couple helper functions from the start: `import_s
 
 #### GDB Setup 
 __gdb__: I'm using [gdb]([https://www.gnu.org/software/gdb/), the Linux debugger
-__gef__: On top of `gdb` I'm using [gef](https://github.com/hugsy/gef). 
+__gef__: On top of `gdb` I'm using [gef](https://github.com/hugsy/gef) which adds a bunch of useful commands for exploitation. 
 __rr:__ I'm also running the binary with [rr](https://rr-project.org/) which is great, and I highly recommend it. It deterministically records the execution and allows you to step through it as you would in gdb normally (with gef/[PEDA](https://github.com/longld/peda)/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. I also use [gef](https://gef.readthedocs.io/en/master/) on top of gdb. 
 __Pwngdb__: I also have [Pwngdb](https://github.com/scwuaptx/Pwngdb) for heap stuff.
 
-I imported 43 songs normally and for the 44th one, I gave it the file path `Cannibal////////////////` since the name must be 24 bytes without any `"."` for this to work. Then I play that song, giving it -1 as a file size and a bunch of 'A's. Let's see what happens when we look at it in a debugger. Because I'm running it with rr, it will  record the execution which we can replay by calling `rr replay`.  
+I imported 43 songs normally and for the 44th one, I gave it the file path `Cannibal////////////////` since the name must be 24 bytes without any `"."` for this to work. This works because Linux allows you to open file descriptors for directories just like normal files. Then I play that song, giving it -1 as a file size and a bunch of 'A's. Let's see what happens when we look at it in a debugger. Because I'm running it with rr, it will  record the execution which we can replay by calling `rr replay`.  
 
 At the end of execution, here is what the song struct array looks like. For the 43 normal song structs, they look like this:
 
-![normal_song_struct](../../images/normal_song_struct.png)
+![normal_song_struct](https://github.com/perribus/ctf_writeups/blob/master/images/normal_song_struct.png?raw=true)
 
 This has been given 19 as its file descriptor field at `0x404548`. The lyrics pointer field at `0x404560` is null because the song hasn't been played yet. Now let's look at song #44:
 
-![song_struct_44](../../images/song_struct_44.png)
+![song_struct_44](https://github.com/perribus/ctf_writeups/blob/master/images/song_struct_44.png?raw=true)
 
-Where there's a 19 in the fd field of the first struct we looked at, there's a 0 here at  `0x4049e0` where there should be a 46. The lyrics pointer field at `0x4049f8` looks promising. Let's see what our heap looks like: 
+Where there's a 19 in the fd field of the first struct we looked at, the `strtok()` overwrote the fd here with 0 at  `0x4049e0` where there should be a 46. The lyrics pointer field at `0x4049f8` looks promising. Let's see what our heap looks like: 
 
-![heap_overflow](../../images/heap_overflow.png) 
+![heap_overflow](https://github.com/perribus/ctf_writeups/blob/master/images/heap_overflow.png?raw=true) 
 
-Great, we have a heap overflow! The size of the top chunk (which resides below the chunk we overflowed) has been overwritten with the character `A` or in hex, 0x41. 
+Great, we have our heap overflow! The size of the top chunk (which resides below the chunk we overflowed) has been overwritten with a bunch of 0x41 bytes (the hex encoding of the character `A`). 
 
 ## What even is a tcache? 
 
@@ -277,7 +278,7 @@ __All we need to do is overwrite the next pointer of a tcache bin to trick the t
 
 [This](https://syedfarazabrar.com/2019-10-12-pico-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation. It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
-#### Heap Chunks 
+###  Heap Chunks 
 
 Below is a diagram of an allocated chunk on the heap. The first 16 bytes of a chunk (the first and second row) are part of the chunk's 'header'. If the previous chunk is freed, the first 8 bytes contain the size of the previous chunk. The second 8 bytes then contain the chunk's own size. After the header is where the chunk's data is stored. This is where the address of the chunk begins (and where the pointer returned by malloc will point). When a chunk is allocated, it uses the top 8 bytes of the next chunk's header as part of its data space. 
 
@@ -303,7 +304,7 @@ address of C -> +---------------------------------------------------------------
 
 AMP are bits with information on the heap; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
 
-#### Chunks in tcache 
+### Chunks in tcache 
 
 When a chunk gets freed, if it's within the size range for tcache it will get pushed on top of its corresponding tcache bin (which is a singly linked list). This chunk becomes the new head chunk of its tcache list and stores a pointer to the old head chunk at the beginning of its data section. 
 
@@ -347,7 +348,7 @@ chunk C     +- - - - - - - - - - - - - - - - - - - - - - - - - -+     |
             | Size of chunk Y                             |A|M|1|            
             +---------------------------------------------------+           
 ```
-Tcache bins are, for lack of a better term, **dumb**. Let's say `chunk B` is in the tcache and you overwrite the pointer to the next tcache chunk with your own address. When `chunk B` gets popped the tcache, the tcache will think its _new_ head is at the address you overwrote. _It doesn't even check if that address is on the heap_. **This is how we use our overwrite to allocate a chunk anywhere in writeable address space.** 
+Tcache bins are, for lack of a better term, **dumb**. Let's say `chunk B` is in the tcache and you overwrite the pointer to the next tcache chunk with your own address. When `chunk B` gets popped the tcache, the tcache will think its _new_ head is at the address you overwrote. _It doesn't check if that address is on the heap_. **This is how we use our overwrite to allocate a chunk anywhere in writeable address space.** 
 
 Let's say we we have allocated a `chunk A` right on top of `chunk B`, both with size 0x20. We first free `chunk B` and it ends up in the tcache for size 0x20, which previously contained `chunk X` at it's head:
 
@@ -398,7 +399,7 @@ writing here -> +-----------------------------------------------------+
 
                         
 ```
-When we next play a song of size 0 the program will call `malloc(0)` again, and the heap manager will give us the next chunk in its tcache bin for 0x20, `chunk B`. When it removes `chunk B`, it will take the pointer we overwrote in B, and make that the new head element:
+When we next play a song of size 0 the program will call `malloc(0)` again, and the heap manager will give us the next chunk in its tcache bin for 0x20, `chunk B`. When it removes `chunk B` from the tcache, it will take the pointer we overwrote in B, and make that the new head element:
 ```
 tcache bin 0x20 ->  0x404078
 ```
@@ -434,7 +435,7 @@ remove_song("13") # free chunk X
 remove_song("12") # free chunk B
 remove_song("11") # free chunk A
 
-play_song("44") # Removes chunk A from tcache bin 0x20
+play_song("44") # Pops chunk A from tcache bin 0x20
 p.sendline("-1") 
 chunkA = p64(0x00) * 2 
 chunkB = p64(0x00) + p64(0x21) + p64(0x404078) # address of songs[0].fd
@@ -456,26 +457,26 @@ chunk X = 0x1ad15e0
 
 After we play song #44 and send our data, this is what the heap looks like:
 
-![after_overwrite](../../images/after_overwrite.png)
+![after_overwrite](https://github.com/perribus/ctf_writeups/blob/master/images/after_overwrite.png?raw=true)
 
 As you can see the pointer to the next tcache chunk in `chunk B` now reads `0x404078`! This is what this looks like on the heap, starting from the header of `chunk A`.
 
-![after_memory](../../images/after_memory.png)
+![after_memory](https://github.com/perribus/ctf_writeups/blob/master/images/after_memory.png?raw=true)
 
 You also may notice that gef doesn't like what we've done and can't print out the tcache. Luckily, calling heapinfo with [pwngdb](https://github.com/scwuaptx/Pwngdb) still works:
 
-![pwngdb](../../images/pwngdb.png)
+![pwngdb](https://github.com/perribus/ctf_writeups/blob/master/images/pwngdb.png?raw=true)
 
 Because the heap thinks that `songs[0].fd` is a chunk in the tcache, and `songs[0].fd = 3`, it thinks that 3 is the next tcache pointer from it. That won't matter to us unless we mess up and try to allocate another chunk of 0x20 without putting more chunks into the 0x20 tcache bin. 
 
 You can also call `vmmap` in `gdb` to get the base address of the heap and `tele` (or `telescope`) that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like *before* we played song #44: 
 
-![vmmap](../../images/vmmap.png)
+![vmmap](https://github.com/perribus/ctf_writeups/blob/master/images/vmmap.png?raw=true)
 
-![tcache](../../images/tcache.png)
+![tcache](https://github.com/perribus/ctf_writeups/blob/master/images/tcache.png?raw=true)
 
 and *after*:
-![after](../../images/after.png)
+![after](https://github.com/perribus/ctf_writeups/blob/master/images/after.png?raw=true)
 
 ## Clobbering some poor Ke$ha songs 
 
@@ -483,7 +484,7 @@ __Now we can write anywhere. But we still need the ability to write anything.__
 
 __To write anything, we want to overwrite another file descriptor with 0 so we can read more data into the program. But we've already used up our 1 write doing the heap overflow__. Because the program checks if a song's lyrics pointer is null before reading from its file descriptor, playing song #44 again will just output whatever's at the lyrics pointer.  So even though we can allocate a chunk over `songs[0].fd` we can't write to it. 
 
-__Luckily the program will very nicely overwrite a file descriptor for us!__ When we play any song of size 0 so the program calls `memset()` on exactly 1 null byte at the address  returned by malloc (line 37 of `play_song`). **So if `malloc()` gives us a chunk at  `songs[0].fd` the program will overwrite `songs[0].fd = 3` to be `songs[0].fd = 0`!** 
+__Luckily the program will very nicely overwrite a file descriptor for us!__ When we play any song of size 0 so the program calls `memset()` on exactly 1 byte at the address  returned by malloc (line 37 of `play_song`). **So if `malloc()` gives us a chunk at  `songs[0].fd` the program will overwrite `songs[0].fd = 3` to be `songs[0].fd = 0`!** 
 
 Then `play_song` will read in 0 bytes of data to this chunk, which neither helps or hurts us.
 
@@ -496,7 +497,7 @@ Here's the code for this:
 
 play_song("44") # Reads from STDIN
 
-# malloc(0), which removes chunk A
+# malloc(0), which pops chunk A from tcache
 p.sendline("-1") # Size of "lyrics"
 
 # Fills chunk A nullbytes
@@ -507,11 +508,11 @@ p.send(chunkA + chunkB)
 
 # tcache bin 0x20 -> chunk B -> 0x404078
 
-play_song("17") # Removes chunk B from tcache bin 0x20
+play_song("17") # Pops chunk B from tcache bin 0x20
 
 # tcache bin 0x20 -> 0x404078
 
-play_song("18") # Removes 0x404078 from tcache 
+play_song("18") # Pops 0x404078 from tcache 
                 # and memsets songs[0].fd to 0 
 
 ```
@@ -533,16 +534,17 @@ If we use an overflow of a "Godzilla" freed chunk to put an address of our choos
 
 **We can then point this back into the `songs` array in the `.bss` to overwrite multiple file descriptor fields with 0, giving us the ability to get as many arbitrary writes as we need.**
 
-#### Heap Layout 
+### Heap Layout 
 In order to do this we need to organize our heap so that song #44's chunk (`chunk A`) be on top of a freed chunk of 0x20 followed by a freed chunk of 0x310 (the size of a "Godzilla" chunk).
 
 Then we construct a payload that overflows song #44's chunk `chunk A` and overwrites:
 1. the 0x20 chunk with a pointer to `songs[0].fd`
 2. the 0x310 chunk with a pointer back into to the `songs` array. 
 
-We can do this by controlling the order that chunks get initially allocated and freed. We will also want to populate our tcache bins with some other chunks first to allow some buffer room for various `malloc()` shenanigans (security checks). 
+We can do this by controlling the order that chunks get initially allocated and freed. 
 
-This is what that looks like: 
+I also padded the tcache bins with some extra chunks because it kept crashing. There's probably a solution that would require fewer extra allocations, but it doesn't make a difference in this exploit to play a few extra songs, so who cares. 
+
  
 
 ```python 
@@ -560,14 +562,14 @@ play_song("13") # E: 0x20 chunk
 play_song("23") # F: 0x310 chunk
 
 # Fill the tcache bin for 0x20
-remove_song("13") # Remove E
-remove_song("12") # Remove B
-remove_song("11") # Remove A
+remove_song("13") # E
+remove_song("12") # B
+remove_song("11") # A
 
 # Fill the tcache bin for 0x310
-remove_song("23") # Remove F
-remove_song("22") # Remove D
-remove_song("21") # Remove C
+remove_song("23") # F
+remove_song("22") # D
+remove_song("21") # C
 
 ```
  Our heap now looks like:
@@ -595,7 +597,7 @@ bin 0x310 -> C -> D -> F
 Now we:
 1. Overwrite chunks `B` and `C` by overflowing  `A` by allocating it for song #44
 2. Do the same thing as before to get a new STDIN read, using our 1 byte memset to make  `songs[0].fd = 0` . 
-3. Then we allocate a chunk of size 0x310 to remove `C` from the tcache. 
+3. Then we allocate a chunk of size 0x310 to pop `C` from the tcache. 
 4.  Once done, we play song[0] i.e. song #1, which will read from stdin. We tell it that we want a chunk of size 0x310 by inputting the same byte size as `Rainbow/godzilla.txt` which is `"767"`. 
 4. Then the heap manager returns us a chunk at `0x4040c8` from its 0x310 tcache bin, and we're in business. 
 
@@ -633,45 +635,53 @@ Whereas with `songs[0].fd` we could only memset one tiny byte of the `songs` arr
 __We now have an arbitrary write ability.__ We can use these corrupted songs to read from STDIN into any address we want, by repeating our tactics.
 
 __Arbitrary Write__:
-1. __We use a song with an STDIN fd to overflow the heap as we did before, by giving `-1` as a size.__
-2. __We again overwrite a freed chunk in the tcache with a new next pointer, allowing us to allocate a chunk at any memory address we want.__
-3. __We give allocate this chunk for another song with an STDIN fd to write whatever we want to this address.__
+i. __We use a song with a STDIN fd to overflow the heap as we did before, by giving `-1` as a size.__
+ii. __We again overwrite a freed chunk in the tcache with a new next pointer, allowing us to allocate a chunk at any memory address we want.__
+iii. __We allocate this chunk for another song with a STDIN fd to write whatever we want to this address.__
 
-Now we need to: 
-1. Get a leak of libc's address
-2. Overwrite the __free_hook to point at `system()`. 
-3. Call that on a chunk that begins with `"/bin/sh"` followed by a nullbyte.
-4. Profit
+### Our exploit
+1. __~~Get arbitrary write~~__
+2. __Get a leak to libc__
+3. __Overwrite the `__free_hook` with a pointer to `system()`__
+4.  __Call free() on a chunk that begins with `"/bin/sh\0"`__
+5. __Profit__
+
 
 ## GOT a leak
 
-We need the address of the function pointer `__free_hook` which is in libc. We'll discuss what the `__free_hook` is shortly, but first let's first figure out its address.
+__The `__free_hook` is a function pointer in libc that will override the `free()` function.__  
 
-#### glibc
-When a process is dynamically compiled, that means that the code for some of the functions it calls (like to `malloc()`  or `open()`) aren't actually included in the binary. These are glibc calls, a standard library that can be found on a linux operating system. When your program is run, it first loads a libc binary into its address space and 'links' each libc function call within the binary's code to the address the libc function code was loaded at.  
+__We are going to overwrite the `__free_hook` with the address of `system()`. Then when we call `free()` on a pointer that points to `"/bin/sh"`, it will call `system("/bin/sh")` instead.__ 
 
-We're given the libc binary, called a shared object file, so we know where the `__free_hook` is in relation to the start of this binary. **This is its "offset" from the "libc base address."** To find where the `__free_hook` is in address space during runtime, we have to take this offset and add it to the address in address space that libc was loaded at during runtime. Except **this changes every time the program is run because  because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization).** 
+__But first we need the addresses of `system()` and `__free_hook`. We'll do this with a leak of a libc address.__
 
-#### GOT
+Don't worry too much about how exactly the  `__free_hook` works, we'll discuss it in more detail after we figure out where it is.  
+
+### glibc
+When a process is dynamically linked, that means that the code for some of the functions it calls (like to `malloc()`  or `open()`) aren't actually included in the binary. These are glibc calls, a standard library that can be found on a linux operating system. When your program is run, it first loads a libc binary into its address space and 'links' each libc function call within the binary's code to the address the libc function code was loaded at.  
+
+We're given the libc binary, called a shared object file, so we know where the `__free_hook` and `system()` are in relation to the start of this binary. **This is its "offset" from the "libc base address."** To find where  `__free_hook` and `system()` are in address space during runtime, we have to take this offset and add it to the address in address space that libc was loaded at during runtime. Except **this changes every time the program is run because  because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization).** 
+
+### GOT
 So we need to leak the address of something in libc _while we're already running_ and use this to find the base address of libc. 
 
-We can use the Globel Offset Table (GOT) for our leak. I'm not going to go in depth on the GOT but [this](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) is a great explainer.  The GOT is what gets used to do the linking between the program's calls to libc functions, and the libc functions themselves. What we need to know is that **the GOT contains a bunch of function pointers to libc.** **Printing out any of these will tell us the address of libc.** 
+We can use the Global Offset Table (GOT) for our leak. I'm not going to go in depth on the GOT but [this](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) is a great explainer.  The GOT is what gets used to do the linking between the program's calls to libc functions, and the libc functions themselves. What we need to know is that **the GOT contains a bunch of function pointers to libc.** **Printing out any of these will tell us the address of libc.** 
 
 We know where the GOT is because it's at a fixed address due to the binary not enabling [PIE](http://www.cs.rpi.edu/~milanova/csci4967/Lecture_Chapter8.pdf).
 
 **All we have to do is find a place where the program prints out data pointed to by an address we can overwrite.** 
 
-#### Combining our file descriptor overwrite with our leak 
+### Combining our file descriptor overwrite with our leak 
 
-When we left off with our exploit we were just about to clobber the top of the `songs` array with our 767 byte write to set more file descriptors to 0. **We can kill two birds with one stone here by also overwriting the lyrics pointer of a song with a pointer to a libc address.**  Then when we call `play_song` for that song instead of calling malloc (which happens if the lyrics pointer is null) the program will will print out whatever the lyrics pointer is pointing at. If we point it at the GOT, it will point out an address in libc. 
+When we left off with our exploit we were just about to clobber the top of the `songs` array with our 767 byte write to set more file descriptors to 0. **We can kill two birds with one stone by also overwriting the lyrics pointer of a song with a pointer to a libc address.**  Then when we call `play_song` for that song instead of calling malloc (which happens if the lyrics pointer is null) the program will will print out whatever the lyrics pointer is pointing at. If we point it at the GOT, it will point out an address in libc. 
 
 There's obviously only one GOT entry worth using: `.got:strtok_ptr`, the one for `strtok()` which is at  at `0x403fc8`. 
 
 So we: 
-1. Starting from the lyrics pointer field of song #2 in the `songs` array, `song[1].lyrics_ptr_to_heap` we overwrite this with the address of the `strtok()` entry in the GOT.
+1. Starting from the lyrics pointer field of song #2 in the `songs` array, we overwrite `song[1].lyrics_ptr_to_heap` with the address of the `strtok()` entry in the GOT.
 2.  Then we continue overwriting song #3 and song #4 to set their file descriptors to 0. 
 
-	We're just constructing two fake song structs with values of 0 in their fd field, and overwriting 	the real structs for songs #3 and songs #4. We can actually just write mostly null bytes here, because it doesn't matter if we clobber most of the other fields. However we do have to keep a valid ptr in the `song_dirname_ptr` field because the program crashed otherwise. 
+	We're just constructing two fake song structs with values of 0 in their fd field, and overwriting 	the real structs for songs #3 and songs #4. We can actually just write mostly null bytes here, because it doesn't matter if we clobber most of the other fields. However we do have to keep a valid ptr in the `song_dirname_ptr` field because the program crashes otherwise. 
 
 ```python
 play_song("1")
@@ -709,7 +719,7 @@ system_addr = libc.symbols['system']
 
 ## "It's a dirty free [hook] for all" - Ke$ha, Take It Off
 
-If the GOT is full of function pointers that get used everytime the binary calls a libc function, why didn't we just overwrite that to get `system("/bin/sh")`? There's [full RELRO](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) so we can't overwrite the GOT, which contains the addresses of dynamically linked library functions. But what we can do is overwrite the `__free_hook` in glibc.
+If the GOT is full of function pointers that get used every time the binary calls a libc function, why didn't we just overwrite that to get `system("/bin/sh")`? There's [full RELRO](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) so we can't overwrite the GOT, which contains the addresses of dynamically linked library functions, because it is read-only. But what we can do is overwrite the `__free_hook` in glibc.
 
 The GNU C Library (glibc) very kindly provides the ability to override the address of malloc(), free() and several other malloc functions. Paraphrased from the [man page](http://man7.org/linux/man-pages/man3/malloc_hook.3.html) :
 
@@ -737,9 +747,9 @@ The function pointed to by __free_hook has a prototype like the function free(3)
 
 ```
 
-`__free_hook` is a function pointer that corresponds to `free()` etc. If the hook is set to null free() will be called as normal. However if the hook points to an address, it will override the default free() function. The same exists for `malloc()`, `realloc()`, and `memalign()`.
+`__free_hook` is a function pointer that corresponds to `free()` etc. If the hook is set to null `free()` will be called as normal. However if the hook points to an address, it will override the default `free()` function. The same exists for `malloc()`, `realloc()`, and `memalign()`.
 
-When `free()` is called the first thing glibc does is check the if the `__free_hook` is set. If so, it executes code at the address stored in `__free_hook` as seen [here](https://code.woboq.org/userspace/glibc/malloc/malloc.c.html#__libc_free):
+When `free()` is called the first thing glibc does is check the if the `__free_hook` is set. If so, it calls the address stored in `__free_hook` instead, as seen [here](https://code.woboq.org/userspace/glibc/malloc/malloc.c.html#__libc_free):
 
 
 ```c
@@ -757,38 +767,48 @@ __libc_free (void *mem)
     }
 ```
 #### tl;dr __free_hook
-If we can write to the `__free_hook`, we can write the address for `system()` and invoke `system("/bin/sh")` if we call `free` on a pointer to heap chunk if its data begins with `"/bin/sh"` followed by a null byte. A heap pointer points directly to its data, so pointer is no different than a pointer to a character array. 
+If we can write to the `__free_hook`, we can overwrite it with the address of `system()` and invoke `system("/bin/sh")` if we call `free` on a pointer to a heap chunk beginning with `"/bin/sh\0"`. A heap pointer points directly to its data, so this will essentially just be a pointer to a character array. 
 
 Now that we have a leak and arbitrary write we can hook `free()` to something a little more fun. 
 
 ## What does a Ke$ha song and this exploit have in common? A good hook
 
-To finish up our exploit we still have to:
-1. Overwrite the __free_hook to point at `system()`. 
-2. Call that on a chunk that begins with `"/bin/sh"` followed by a nullbyte.
-3. Profit
+### Our exploit
+1. __~~Get arbitrary write~~__
+2. __~~Get a leak to libc~~__
+3. __Overwrite the `__free_hook` with a pointer to `system()`__
+4.  __Call free() on a chunk that begins with `"/bin/sh\0"`__
+5. __Profit__
 
-Because going forward, we're going to use the same tactics we did before, I'm not going to go into too much detail. However the full exploit which is (heavily) commented is below. 
+
+Going forward we're going to use the same tactics we did before so I won't go into too much detail. However the full exploit, which is (heavily) commented, is below. 
 
 This is how the rest of our exploit will go: 
 1. We use song # 3, to do a second heap overflow  and overwrite another tcache next pointer with the address of the free hook. For this we'll use a 0x3c0 chunk with the song `"Animal/animal.txt"`.  
 2. Then we can use song #4 to write the address of `system` to the `__free_hook` address.
 3. Once we do that we call free on a pointer to the string  `"/bin/sh"` followed by a null byte.
 
-But to do the above, we'll have to return to the beginning of our exploit and add a few things:
+But to do the above, we'll have to return to the beginning of our exploit and add a couple of things:
  
-* All we need to trigger `system("/bin/sh")`  is to take any pointer on which the program will calls `free()` and point it at the string `/bin/sh` followed by a null byte.  There are many ways we could have gotten this but I chose to just use one of our overflows to overwrite an extra chunk of size 0x20 and put "/bin/sh" at the start of it's data section. 
-	1. We allocate an extra chunk, `chunk Z` under `chunk A`, and
+* All we need to trigger `system("/bin/sh")`  is to take a pointer that the program will call `free()` on, and point it at the string `/bin/sh` followed by a null byte.  There are many ways we could do this but let's just use one of our overflows to overwrite an extra chunk of size 0x20 and put "/bin/sh" at the start of its data section.  That means: 
+	1. We allocate an extra chunk, `chunk Z` under `chunk A`.
 	2. When we overflow `chunk A` we write `"/bin/sh"` to this extra chunk followed by nullbytes.
 	3. We then continue the overwrite as before.
 After the rest of the exploit:
 	4. We call `remove_song` on the song for `chunk Z` so `free()` was called on the song's lyrics pointer which pointed to  `"/bin/sh"`
 
-* We also need some new chunks to use for our `__free_hook` overwrite. We're using 0x3c0 size chunks with the song `"Animal/animal.txt"` so we need to add those to our heap layout at the top and then populate the 0x3c0  bin in the same way we did for 0x310. 
+* We also need to add some chunks to use for our `__free_hook` overwrite. We're using 0x3c0 size chunks with the song `"Animal/animal.txt"` so we need to add those to our heap layout at the top and then populate the 0x3c0  tcache bin in the same way we did for 0x310 tcache. This is relatively straightforward, and can be seen in the exploit code.  
 
-Putting that all together, below is what the final exploit looked like:
+Putting that all together, we can now try out our final exploit. 
 
 # Profit
+
+### Our exploit
+1. __~~Get arbitrary write~~__
+2. __~~Get a leak to libc~~__
+3. ~~__Overwrite the `__free_hook` with a pointer to `system()`__~~
+4.  ~~__Call free() on a chunk that begins with `"/bin/sh\0"`__~~
+5. __Profit__
 
 ```python
 from pwn import *
@@ -894,9 +914,9 @@ p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 # tcache bin 0x310 -> C -> 0x4040c8 (songs[1].lyrics_ptr)
 # tcache bin 0x3c0 -> L -> I -> G
 
-play_song("17") # Removes B from 0x20 tcache bin
-play_song("18") # Removes 0x404078 from 0x20 tcache bin and memsets songs[0].fd to 0 
-play_song("27") # Remove chunk C from 0x310 tcache bin
+play_song("17") # Pop B from 0x20 tcache bin
+play_song("18") # Pop 0x404078 from 0x20 tcache bin and memsets songs[0].fd to 0 
+play_song("27") # Pop C from 0x310 tcache bin
 
 # tcache bin 0x20  -> corrupted 
 # tcache bin 0x310 -> C -> 0x404c8 (songs[1].lyrics_ptr)
@@ -944,7 +964,7 @@ p.send(chunkK + chunkL) # Send payload
 # tcache bin 0x310 -> corrupted
 # tcache bin 0x3c0 -> L -> __free_hook
 
-play_song("35") # Remove L from 0x3c0 tcache bin
+play_song("35") # Pop L from 0x3c0 tcache bin
 
 """ Write to free hook """
 
