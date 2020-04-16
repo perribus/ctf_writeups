@@ -117,13 +117,11 @@ Before we move on to exploitation, let's look at the last function of interest.
 
 ![remove_song](../../images/remove_song.png)
 
-Option 4 allows a user to remove a song, which sets its struct pointer to null, calls `free` on its lyrics pointer, and closes its file descriptor. It doesn't decrement song count however (although this never matters). 
-
-So, given the `malloc` and `free` it seems like we're working with a heap challenge. 
+Option 4 allows a user to remove a song, which calls `free` on its lyrics pointer, closes its file descriptor and sets its pointers to null, . It doesn't decrement song count however (although this never matters). 
 
 # How many Ke$ha songs fit into a tcache bin?
 
-**Spoiler:** This is how the eventual exploit will work. We're going to use this overflow to overwrite the next three chunks. In the first one we're going to put a `//bin/sh` for future use. In the following two chunks, which will be of differing sizes (0x20 and 0x310), we're going to overwrite the tcache next pointers. We're going to point the tcache pointers in both of these chunks bainto the .bss at the `songs` array. We're going to use the first corrupted tcache pointer (0x20) to memset the file descriptor at `songs[0].fd` to be 0 for STDIN. Then we're going to use our second corrupted tcache pointer (0x310) in conjunction with this read from STDIN by giving a song size of 0x310 ensuring we get our second tcache pointer back into the .bss section. We use this to clobber the next three songs, overwriting the lyrics pointer of songs[1] with a GOT address and overwriting the file descriptors of songs[2] and songs[3] with 0. Playing song[1] will give us a libc address leak. Next we use songs[1] to read -1 bytes from stdin and overflow another heap chunk in the same way we did the first. This time we overflow a freed chunk of size 0x3c0, and point its tcache pointer at the `__free_hook` in libc. Then we use songs[2] in conjuction with this corrupted tcache pointer to overwrite the `__free_hook` with `system.` Now when we call `remove_song` on the song pointed at the chunk we wrote `//bin/sh` into, it will call `system("//bin/sh")` and we have a shell!
+**Spoiler:** This is how the eventual exploit will work. We're going to use this overflow to overwrite the next three chunks. In the first one we're going to put a `//bin/sh` for future use. In the following two chunks, which will be of differing sizes (0x20 and 0x310), we're going to overwrite the tcache next pointers. We're going to point the tcache pointers in both of these chunks into the .bss at the `songs` array. The first corrupted tcache pointer (0x20) will be used to memset the file descriptor at `songs[0].fd` to be 0 for STDIN. This new read from STDIN by inputting a song size of 0x310 ensuring we get our second tcache pointer back into the .bss section. We use this to clobber the next three songs, overwriting the lyrics pointer of songs[1] with a GOT address and overwriting the file descriptors of songs[2] and songs[3] with 0. Playing song[1] will give us a libc address leak. Next we use songs[1] to read -1 bytes from stdin and overflow another heap chunk in the same way we did the first. This time we overflow a freed chunk of size 0x3c0, and point its tcache pointer at the `__free_hook` in libc. Then we use songs[2] in conjuction with this corrupted tcache pointer to overwrite the `__free_hook` with `system.` Now when we call `remove_song` on the song pointed at the chunk we wrote `//bin/sh` into, it will call `system("//bin/sh")` and we have a shell!
 
 First, let's check to see if that vulnerability works how we think it does. 
 
@@ -256,7 +254,7 @@ tc bin ->   | Null pointer (no next tcache element)             |  <--
             | Size of chunk Y                             |A|M|0|            
             +---------------------------------------------------+           
 ```
-Tcache bins are, for lack of a better term, **dumb**. If chunk B is in the tcache and you overwrite the pointer to the next tcache chunk with your own address, when chunk B is at the head of tcache bin and then gets reallocated the tcache think its _new_ head is whatever is at the address you overwrote. _It doesn't even check if that new address is on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
+Tcache bins are, for lack of a better term, **dumb**. If chunk B is in the tcache and you overwrite the pointer to the next tcache chunk with your own address, when chunk B gets taken from the top of the tcache, the tcache will think its _new_ head is at the address you overwrote. _It doesn't even check if that address is on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
 
 Let's say we we have allocated a `chunk A` right on top of `chunk B`, both with size 0x20. We first free `chunk B` and it ends up in the tcache for size 0x20, which previously contained `chunk X` at it's head:
 
@@ -273,7 +271,7 @@ When we play song #44 we are calling malloc(0). Even though we're asking for 0 b
 ```
 tcache bin 0x20 -> chunk B -> chunk X -> null
 ```
-Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
+Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section, _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
 
 ```
 
@@ -305,7 +303,7 @@ When we next play a song of size 0 the program will call `malloc(0)` again, and 
 ```
 tcache bin 0x20 ->  0x404078
 ```
-Now when we play anotherr song of size 0, the heap manager will give us `0x404078`!
+Now when we play anothers song of size 0, the heap manager will give us `0x404078`!
 
 ## Now let's use like every gdb add-on ever
 
