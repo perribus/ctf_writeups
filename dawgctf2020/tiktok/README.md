@@ -220,7 +220,7 @@ address of C -> +---------------------------------------------------------------
 
 ```
 
-AMP are bits with information on the hea; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
+AMP are bits with information on the heap; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
 
 When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X with X as the head element, it may look like this
 
