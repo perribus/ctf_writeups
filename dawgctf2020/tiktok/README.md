@@ -251,7 +251,7 @@ chunk C     +- - - - - - - - - - - - - - - - - - - - - - - - - -+     |
             +---------------------------------------------------+     |    
             | Size of chunk X                             |A|M|P|     |      
             +---------------------------------------------------+     V      
-tc bin ->   | Null pointer (no next tcache element)             |  <--
+            | Null pointer (no next tcache element)             |  <--
             +-    -    -    -    -    -    -    -    -    -    -+                                                  |          
             .                                                   .           
             . Unused space                                      .                
@@ -279,7 +279,7 @@ When we play song #44 we are calling malloc(0). Even though we're asking for 0 b
 ```
 tcache bin 0x20 -> chunk B -> chunk X -> null
 ```
-Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A (we could theoretically write anything here). Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section, _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
+Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A (we could write anything here). Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section, _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
 
 ```
 
