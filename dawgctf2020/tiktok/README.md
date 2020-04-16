@@ -800,7 +800,7 @@ As mentioned above, [this](https://syedfarazabrar.com/2019-10-12-picoctf-2019-he
 
 [Good explainer](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) of the GOT and PLT
 
-##### Tools
+### Tools
 gef: https://github.com/hugsy/gef
 pwngdb: https://github.com/scwuaptx/Pwngdb
 pwntools: https://github.com/Gallopsled/pwntools
