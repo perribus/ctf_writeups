@@ -2,9 +2,13 @@
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
+This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). This was a great challenge (which I'm not only saying because I'm biased towards Ke$ha themed challenges). How can you not love a challenge called TikTok that `strtok` (haha) to create a clever vuln and then forces CTF players to wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
+
+I was originally going to do a much shorter writeup of this challenge, but I wanted to make a writeup that someone could read with little to no pwning or heap experience and understand enough to follow what was happening. I also wanted to show _how_ I solved it so other people could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain something :). However, by reading this you are contractually required to appreciate my Ke$ha puns, sorry no refunds. 
+
 # Challenge Files
 
-This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
+We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
 
 +  **`tiktok`**
 
