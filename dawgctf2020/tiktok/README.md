@@ -407,7 +407,13 @@ __Now if we play another song of size 0, the heap manager will give us a chunk a
 
 ## Now let's use like every gdb add-on ever
 
-What does this look like within the actual program, using `gdb` + `rr` + `gef` + `Pwngdb`? First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
+What does this look like within the actual program, using `gdb` + `rr` + `gef` + `Pwngdb`? 
+
+In order for this attack to work we need to be able to organize our heap so that `chunk A` (0x20 bytes) sits on top of another freed chunk of 0x20 bytes (`chunk B`). To do this we need to first allocate some 0x20 bytes chunks and then free them into the 0x20 tcache bin in a specific order. That way we can pop them out in the order we need. 
+
+First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. **However, by importing just a directory name, we can create songs of 0 bytes.** `num[0]` is set to 0 in line 12 of `play_song`. When`read()` is called on the file descriptor in line 30, it never checks whether that read was successful. Our read will return an error but that won't matter because `num[0]` will remain at 0, setting `nbytes` to 0. 
+
+**Now we have the ability to allocate ton of 0x20 chunks which will make our tcache attack a breeze (or sleaze as the Queen would say)**
 
 ```python
 
