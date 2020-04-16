@@ -82,7 +82,7 @@ The file path is getting read into an global array of structs  which is our play
 
 ![song_struct](../../images/song_struct.png)
 
-The first 24 bytes of the struct is a 24 bytes array of the song file path. Directly below it is a 4 byte file descripter that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer will point at the file path, the second will point at the file name and the third will point into the heap (given intended program behavior). 
+The first 24 bytes of the struct is a 24 bytes array of the song file path. Directly below it is a 4 byte file descripter (fd) that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer will point at the file path, the second will point at the file name and the third will point into the heap (given intended program behavior). 
 
 Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's favorite libc function, [strtok](http://www.cplusplus.com/reference/cstring/strtok/). While my first instinct was to look there for vulnerabilities, that would be a rookie mistake. Clearly the first thing any good CTF player would do in this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
 
@@ -101,13 +101,13 @@ This all becomes very interesting when you realize two things.
 
 1) The `read` on line 10 reads in up to 24 bytes, exactly the size of `songs[i].song_file_path`. This means that if the user inputs a filepath that is 24 bytes long, no null byte will be appended on the end. In each song struct, `songs[i].song_file_path`resides directly above `songs[i].fd` which brings me to 2). 
 
-2) The first three fds for a Linux process, fd = 0, 1, 2 will (unless otherwise specified) be assigned to stdin, stdout and stderr. So when `open` is called, it will assign a new fd to the file it's opening, beginning with fd = 3. Every time a song is imported a new fd is opened for it, and won't get closed until the user chooses to remove the song. Were the user to import 44 songs then `songs[43].fd = 46`, which just so happens to be the ASCII code for `.`.
+2) The first three file descriptors for a Linux process, 0, 1, and 2 will (unless otherwise specified) be assigned to STDIN, STDOUT and STDERR respectively. So when `open` is called on a file, it will assign a new fd beginning with 3. Every time a song is imported a new file descriptor is opened for it, and won't get closed until the user chooses to remove the song. Were the user to import 44 songs, then `songs[43].fd = 46`, which just so happens to be the ASCII code for `.`.
 ```python
 ➜  python3
 >>> chr(46)
 '.'
 ```
-If I import a song path of 24 bytes on my 44th import, and my song path contains no `.` character, then strtok will overwrite the song's file descriptor with a nullbyte, i.e. `songs[43].fd = 0`. A song's file descriptor gets read from when a song is played (we'll see this when we look at the `play_song` function), which means playing the 44th song makes the program read input from stdin!
+If I import a song path of 24 bytes on my 44th import, and my song path contains no `.` character, then strtok will overwrite the song's file descriptor with a nullbyte, i.e. `songs[43].fd = 0`. A song's file descriptor gets read from when a song is played (we'll see this when we look at the `play_song` function), which means playing the 44th song makes the program read input from STDIN!
 
 What can we do with this behavior? Well, we need to look at where the fd gets read from, which is in `play_song` (Option 3). 
 
@@ -127,7 +127,7 @@ Option 4 allows a user to remove a song, which calls `free` on its lyrics pointe
 
 # (Spoiler)
 
-This is how the eventual exploit will work. We're going to use this overflow to overwrite the next three chunks. In the first one we're going to put a `//bin/sh` for future use. In the following two chunks, which will be of differing sizes (0x20 and 0x310), we're going to overwrite the tcache next pointers. We're going to point the tcache pointers in both of these chunks into the .bss at the `songs` array. The first corrupted tcache pointer (0x20) will be used to memset the file descriptor at `songs[0].fd` to be 0 for STDIN. This new read from STDIN by inputting a song size of 0x310 ensuring we get our second tcache pointer back into the .bss section. We use this to clobber the next three songs, overwriting the lyrics pointer of songs[1] with a GOT address and overwriting the file descriptors of songs[2] and songs[3] with 0. Playing song[1] will give us a libc address leak. Next we use songs[1] to read -1 bytes from stdin and overflow another heap chunk in the same way we did the first. This time we overflow a freed chunk of size 0x3c0, and point its tcache pointer at the `__free_hook` in libc. Then we use songs[2] in conjuction with this corrupted tcache pointer to overwrite the `__free_hook` with `system.` Now when we call `remove_song` on the song pointed at the chunk we wrote `//bin/sh` into, it will call `system("//bin/sh")` and we have a shell!
+This is how the eventual exploit will work. We're going to use this overflow to overwrite the next three chunks. In the first one we're going to put a `//bin/sh` for future use. In the following two chunks, which will be of differing sizes (0x20 and 0x310), we're going to overwrite the tcache next pointers. We're going to point the tcache pointers in both of these chunks into the .bss at the `songs` array. The first corrupted tcache pointer (0x20) will be used to memset the file descriptor at `songs[0].fd` to be 0 for STDIN. This new read from STDIN by inputting a song size of 0x310 ensuring we get our second tcache pointer back into the .bss section. We use this to clobber the next three songs, overwriting the lyrics pointer of `songs[1]` with a GOT address and overwriting the file descriptors of `songs[2]` and `songs[3]` with 0. Playing `song[1]` will give us a libc address leak. Next we use `songs[1]` to read -1 bytes from STDIN and overflow another heap chunk in the same way we did the first. This time we overflow a freed chunk of size 0x3c0, and point its tcache pointer at the `__free_hook` in libc. Then we use `songs[2]` in conjuction with this corrupted tcache pointer to overwrite the `__free_hook` with `system.` Now when we call `remove_song` on the song pointed at the chunk we wrote `//bin/sh` into, it will call `system("//bin/sh")` and we have a shell!
 
 # How many Ke$ha songs fit into a tcache bin?
 
