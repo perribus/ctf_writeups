@@ -186,7 +186,7 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 _(If you're already familiar with tcache attacks, or don't really care, you can skip the next two sections)_
 
-Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks its corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
+Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets freed, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversely, when a chunk in this size range is requested by the program, the heap manager checks its corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
 [This](https://syedfarazabrar.com/2019-10-12-pico-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
@@ -307,7 +307,7 @@ Now when we play anothers song of size 0, the heap manager will give us `0x40407
 
 ## Now let's use like every gdb add-on ever
 
-What does this look like within the actual program, using gdb + rr + gef + pwndbg? First we need a way to import and play songs of 0 bytes, which at first doesn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
+What does this look like within the actual program, using gdb + rr + gef + pwndbg? First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
 
 ```python
 
@@ -370,7 +370,7 @@ You also may notice that gef doesn't like what we've done and can't print out th
 
 Because the heap thinks that `songs[0].fd = 3` is a chunk in the tcache, it thinks that 3 is the next tcache pointer from it. That won't matter to us unless we mess up and try to allocate another chunk of 0x20 without putting more chunks into the 0x20 tcache bin. 
 
-You can also call `vmmap` in gef to get the base address of the heap and `tele` that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like **before** we freed everything: 
+You can also call `vmmap` in gef to get the base address of the heap and `tele` that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like *before* we freed everything: 
 
 ![vmmap](../../images/vmmap.png)
 
@@ -381,9 +381,9 @@ and *after*:
 
 # Let's clobber some Ke$ha songs 
 
-So our current goal is to overwrite the file descriptor with 0 so we can read more data into the program, but we've already used up our 1 write. Because the program checks if a song's lyrics pointer is null before reading from its file descriptor, after the first time we play song #44 playing it again will just output whatever is at the lyrics pointer.  So even though we can allocate a chunk over `songs[0].fd` we can't write to it. 
+So our current goal is to overwrite the file descriptor with 0 so we can read more data into the program, but we've already used up our 1 write. Because the program checks if a song's lyrics pointer is null before reading from its file descriptor, playing song #44 again will just output whatever's at the lyrics pointer.  So even though we can allocate a chunk over `songs[0].fd` we can't write to it. 
 
-Luckily the program will do that for us! When we play any song of size 0 so the program memsets exactly 1 null byte of the address of the chunk returned by malloc (line 37 of play_song). So if malloc gives use the address to `songs[0].fd` the program will kindly will overwrite `songs[0].fd = 3` to be `songs[0].fd = 0`! (Then it will read in 0 bytes of data, which neither helps or hurts us.)
+Luckily the program will very nicely do that for us! When we play any song of size 0 so the program memsets exactly 1 null byte of the address of the chunk returned by malloc (line 37 of play_song). So if malloc gives use the address to `songs[0].fd` the program will kindly will overwrite `songs[0].fd = 3` to be `songs[0].fd = 0`! (Then it will read in 0 bytes of data, which neither helps or hurts us.)
 
 ```python
 
@@ -560,7 +560,7 @@ tl;dr if we can write to the `__free_hook`, we can write the address for `system
 
 # What does a Ke$ha song and this exploit have in common? A good hook
 
-Because we are given the libc that is running on the server, we know where the `__free_hook` is within it, i.e. we know what offset it's at from the base of libc. But we don't know what address the base of libc will be while our program is executing because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc. 
+Because we are given the libc that is running on the server, we know we know the offset of the free hook from the base of libc. But we don't know what address the libc base address will be during execution because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc. 
 
 Luckily we can find libc by overwriting the lyrics pointers in a song struct. When we call `play_song` for that song, if the lyrics pointer is not null it will print out whatever it's pointing at. If we point it at the GOT, it will point out an address in libc. We know where the GOT because it's at a fixed address as the binary doesn't have PIE enabled, and the GOT contains function pointers to libc. All we need to get is any address in libc to figure out the base address. 
 
@@ -601,7 +601,7 @@ Now that we have a leak we can use the same techniques we've used to get to this
 
 We use the first of our two songs with file descriptors of 0 to do a second heap overflow and overwrite another tcache next pointer with the address of the free hook. For this we'll use a 0x3c0 chunk with the song `"Animal/animal.txt"`. Then we can use the second song to write the address of `system` to the freehook. 
 
-Once we do that all we need is a heap chunk that starts with the memory "//bin/sh" followed by a null byte. We can go back to our first heap overflow and overflow an extra chunk of 0x20 and write "//bin/sh" to it. We're going to also need to allocate some more chunks to perform the second overflow and write. All in all, this is what the final exploit will look like: 
+Once we do that all we need is a heap chunk that starts with the memory "//bin/sh" followed by a null byte. We can go back to our first heap overflow and overflow an extra chunk of 0x20 and write "//bin/sh" to it. We're going to also need to allocate some more chunks to perform the second overflow and write. All in all, this is what the final exploit looks like: 
 
 # Exploit
 
