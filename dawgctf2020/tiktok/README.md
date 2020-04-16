@@ -383,7 +383,7 @@ You can also call `vmmap` in gef to get the base address of the heap and `tele` 
 and *after*:
 ![after](../../images/after.png)
 
-### Now let's clobber some Ke$ha songs 
+# Let's clobber some Ke$ha songs 
 
 Ok so now that we've gone over the basics of how this tcache attack will work, I'm going to keep it more high level. If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
@@ -515,7 +515,7 @@ Whereas with songs[0].fd we could only memset one measly byte of the songs array
 
 So our game plan going forward is a product of the protections placed on the binary. There's [full RELRO](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) so we can't overwrite the GOT, which contains the addresses of dynamically linked library functions. But what we can do is overwrite the `__free_hook` in glibc.
 
-## "It's a dirty free [hook] for all" - Ke$ha, Take It Off
+# "It's a dirty free [hook] for all" - Ke$ha, Take It Off
 
 The GNU C Library (glibc) kindly provides the ability to override the address of malloc(), free() and several other malloc functions. Paraphrased from the [man page](http://man7.org/linux/man-pages/man3/malloc_hook.3.html):
 
@@ -564,7 +564,7 @@ __libc_free (void *mem)
 ```
 tl;dr if we can write to the `__free_hook`, we can write the address for `system()` and invoke `system("/bin/sh")` if we call `free` on a heap chunk that begins with `//bin/sh` followed by a null byte. This works because system takes a pointer to a character array, and a pointer to a libc chunk that begins with these characters is the same thing. 
 
-## What does a Ke$ha song and this exploit have in common? A good hook
+# What does a Ke$ha song and this exploit have in common? A good hook
 
 Because we are given the libc that is running on the server, we know where the `__free_hook` is within it, i.e. we know what offset it's at from the base of libc. But we don't know what address the base of libc will be while our program is executing because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc. 
 
@@ -608,6 +608,8 @@ Now that we have a leak we can use the same techniques we've used to get to this
 We use the first of our two songs with file descriptors of 0 to do a second heap overflow and overwrite another tcache next pointer with the address of the free hook. For this we'll use a 0x3c0 chunk with the song `"Animal/animal.txt"`. Then we can use the second song to write the address of `system` to the freehook. 
 
 Once we do that all we need is a heap chunk that starts with the memory "//bin/sh" followed by a null byte. We can go back to our first heap overflow and overflow an extra chunk of 0x20 and write "//bin/sh" to it. We're going to also need to allocate some more chunks to perform the second overflow and write. All in all, this is what the final exploit will look like: 
+
+# Exploit
 
 ```python
 
