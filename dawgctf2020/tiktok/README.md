@@ -1,10 +1,10 @@
-# TikTok
+# TikTok - A tcache tutorial with our dear friend Ke$ha
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
 This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a clever vuln and then forces CTF players to wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
 
-I was originally going to do a much shorter writeup of this challenge, but I wanted to make one that someone could read with little to no pwning or heap experience and understand enough to follow along. I also wanted to show _how_ I solved it so other people could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain something :). 
+Originally I wanted to do a quick writeup because when are you ever going to do a Ke$ha-themed CTF challenge? But it became much longer and in depth so I could write something that someone with little to no pwning or heap experience could understand enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may go too into the weeds, or overly explain things :). 
 
 However, by reading this you are contractually required to appreciate my Ke$ha puns, sorry no refunds. 
 
