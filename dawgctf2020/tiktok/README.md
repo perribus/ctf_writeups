@@ -115,7 +115,7 @@ What can we do with this behavior? Well, we need to look at where the fd gets re
 
 ![play_song](../../images/play_song.png)
 
-If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk. If `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes (the value will wrap around to MAXINT). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
+If a song has not yet been played, i.e. it's `lyrics_ptr_to_heap` has not been set (line 26), `play_song` will read in a line telling it the size of the file (`nbytes`). As you can see in the example song file shown above `Animal/tiktok.txt`is 2117 bytes. If we are inputting from stdin, we could put in a file size of our choosing, including -1. Then, our program mallocs a chunk of exactly `nbytes + 1` (if we were to give -1 as the size `nbytes` then it would `malloc(0)`. It then calls `memset` on the bytes just malloc'd, setting them to null bytes. Then it reads in `nbytes` of data into a heap chunk. If `nbytes = -1` it would read in -1 bytes which, as an unsigned int, is a lot of bytes (the value will wrap around to UINT_MAX). So with this, we can import 44 songs, and use the last one to overwrite a heap chunk. 
 
 Before we move on to exploitation, let's look at the last function of interest.
 
@@ -220,7 +220,7 @@ address of C -> +---------------------------------------------------------------
 
 AMP are bits with information on the hea; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
 
-When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with X as the head element, it may look like this
+When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X with X as the head element, it may look like this
 
 ```
  (free)
