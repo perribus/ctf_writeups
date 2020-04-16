@@ -1,4 +1,4 @@
-# Writeup for TikTok
+# TikTok
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
@@ -40,7 +40,7 @@ Before I leave, brush my teeth with a bottle of Jack
 ...
 ```
 
-## strtok() on the clock but the party don't stop, no 
+# strtok() on the clock but the party don't stop, no 
 
 The very first step, and probably the most important part of solving this challenge, is to put on Ke$ha. Personally, I preferred her most recent album for finding the vuln, and her earlier work for exploiting it, but to each their own. 
 
@@ -62,7 +62,7 @@ Choice:
 
 Next we decompile the binary. Option 2 and 5 are rather straightforward (2 outputs the playlist and 5 exits the program), but Options 1, 3, and 4 look interesting, so we'll look at the functions that get called for those options. 
 
-#### Import Song
+### Import Song
 
 Below is the edited decompilation of `import_song`, the function that gets called when selecting Option 1. 
 
@@ -121,7 +121,7 @@ Option 4 allows a user to remove a song, which sets its struct pointer to null, 
 
 So, given the `malloc` and `free` it seems like we're working with a heap challenge. 
 
-## Exploit: How many Ke$ha songs fit into a tcache bin?
+# How many Ke$ha songs fit into a tcache bin?
 
 **Spoiler:** This is how the eventual exploit will work. We're going to use this overflow to overwrite the next three chunks. In the first one we're going to put a `//bin/sh` for future use. In the following two chunks, which will be of differing sizes (0x20 and 0x310), we're going to overwrite the tcache next pointers. We're going to point the tcache pointers in both of these chunks into the .bss at the `songs` array. We're going to use the first corrupted tcache pointer (0x20) to memset the file descriptor at `songs[0].fd` to be 0 for STDIN. Then we're going to use our second corrupted tcache pointer (0x310) in conjunction with this read from STDIN by giving a song size of 0x310 ensuring we get our second tcache pointer back into the .bss section. We use this to clobber the next three songs, verwriting the lyrics pointer of songs[1] with a GOT address (I chose the strtok() function) and overwriting the file descriptors of songs[2] and songs[3] with 0. Now playing song[1] will give us a libc address leak. Now we use songs[1] to read -1 bytes from stdin and overflow another heap chunk in the same way we did the first. This time we overflow a freed chunk of size 0x3c0, and point it's tcache pointer at the `__free_hook` in libc. Then we use songs[2] in conjuction with this corrupted tcache pointer to overwrite the `__free_hook` with `system.` Now when we call `remove_song` on the song pointed at the chunk we wrote `//bin/sh` into, it will call `system("//bin/sh")` and we have a shell!
 
@@ -184,7 +184,7 @@ Where there's a 19 in the first struct, there's a 0 in this one where there shou
 
 Great, we have a heap overflow! The size of the top chunk has been overwritten with `A`. Now we have to make this useful somehow. 
 
-### What even is a tcache? 
+## What even is a tcache? 
 
 _(If you're already familiar with tcache attacks, or don't really care, you can skip the next two sections)_
 
@@ -309,7 +309,7 @@ tcache bin 0x20 ->  0x404078
 ```
 Now when we play anotherr song of size 0, the heap manager will give us 0x404078!
 
-### Now let's use like every gdb tool ever
+## Now let's use like every gdb add-on ever
 
 What does this look like within the actual program, using gdb + rr + gef + pwndbg? First we need a way to import and play songs of 0 bytes, which at first doesn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
 
@@ -515,7 +515,7 @@ Whereas with songs[0].fd we could only memset one measly byte of the songs array
 
 So our game plan going forward is a product of the protections placed on the binary. There's [full RELRO](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) so we can't overwrite the GOT, which contains the addresses of dynamically linked library functions. But what we can do is overwrite the `__free_hook` in glibc.
 
-### It's a dirty free [hook] for all - Ke$ha, Take It Off
+## "It's a dirty free [hook] for all" - Ke$ha, Take It Off
 
 The GNU C Library (glibc) kindly provides the ability to override the address of malloc(), free() and several other malloc functions. Paraphrased from the [man page](http://man7.org/linux/man-pages/man3/malloc_hook.3.html):
 
@@ -564,7 +564,7 @@ __libc_free (void *mem)
 ```
 tl;dr if we can write to the `__free_hook`, we can write the address for `system()` and invoke `system("/bin/sh")` if we call `free` on a heap chunk that begins with `//bin/sh` followed by a null byte. This works because system takes a pointer to a character array, and a pointer to a libc chunk that begins with these characters is the same thing. 
 
-### What does a Ke$ha song and this exploit have in common? A good hook
+## What does a Ke$ha song and this exploit have in common? A good hook
 
 Because we are given the libc that is running on the server, we know where the `__free_hook` is within it, i.e. we know what offset it's at from the base of libc. But we don't know what address the base of libc will be while our program is executing because of [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization). So we need to leak an address in libc. 
 
