@@ -802,5 +802,7 @@ As mentioned above, [this](https://syedfarazabrar.com/2019-10-12-picoctf-2019-he
 
 ### Tools
 gef: https://github.com/hugsy/gef
+
 pwngdb: https://github.com/scwuaptx/Pwngdb
+
 pwntools: https://github.com/Gallopsled/pwntools
