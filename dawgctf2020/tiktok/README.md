@@ -358,7 +358,7 @@ chunk A = 0x1ad1290
 chunk B = 0x1ad12b0
 chunk X = 0x1ad15e0
 ```
-It's important to note that because the `.bss` section is part of the binary and there is no PIE, those addresses remain the same.So the address of `songs[0].fd` will always be `0x404078`.
+It's important to note that because the `.bss` section is part of the binary and there is no PIE, those addresses remain the same. So the address of `songs[0].fd` will always be `0x404078`.
 
 After we play song #44 and send our data, this is what the heap looks like:
 
@@ -368,7 +368,7 @@ As you can see the pointer to the next tcache chunk in `chunk B` now reads `0x40
 
 ![after_memory](../../images/after_memory.png)
 
-You also may notice that gef doesn't like what we've done and can't print out the tcache. Luckily, calling heapinfo with [pwngdb](https://github.com/scwuaptx/Pwngdb) which I have on top of gef still works:
+You also may notice that gef doesn't like what we've done and can't print out the tcache. Luckily, calling heapinfo with [pwngdb](https://github.com/scwuaptx/Pwngdb) still works:
 
 ![pwngdb](../../images/pwngdb.png)
 
@@ -384,8 +384,6 @@ and *after*:
 ![after](../../images/after.png)
 
 # Let's clobber some Ke$ha songs 
-
-Ok so now that we've gone over the basics of how this tcache attack will work, I'm going to keep it more high level. If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
 
 So our current goal is to overwrite the file descriptor with 0 so we can read more data into the program, but we've already used up our 1 write. Because the program checks if a song's lyrics pointer is null before reading from its file descriptor, after the first time we play song #44 playing it again will just output whatever is at the lyrics pointer.  So even though we can allocate a chunk over `songs[0].fd` we can't write to it. 
 
@@ -798,4 +796,15 @@ remove_song("19")
 # SHELL!
 p.interactive()
 ```
+# Resources
 
+If you're interested in knowing more about heap attacks Azeria's [post](https://azeria-labs.com/heap-exploitation-part-2-glibc-heap-free-bins/) on the glibc heap is a good place to start, as well as Shellphish's [how2heap](https://github.com/shellphish/how2heap) repository which also links to further resources. 
+
+As mentioned above, [this](https://syedfarazabrar.com/2019-10-12-picoctf-2019-heap-challs/) is a great writeup on other tcache attacks.  
+
+[Good explainer](https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html) of the GOT and PLT
+
+#####Tools
+gef: https://github.com/hugsy/gef
+pwngdb: https://github.com/scwuaptx/Pwngdb
+pwntools: https://github.com/Gallopsled/pwntools
