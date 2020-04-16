@@ -222,7 +222,7 @@ address of C -> +---------------------------------------------------------------
 
 AMP are bits with information on the heap; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
 
-When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X with X as the head element, it may look like this
+When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer to the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X with X as the head element, it may look like this
 
 ```
  (free)
@@ -239,7 +239,7 @@ tc bin ->   | Pointer to next chunk in tcache bin               | --->
 chunk C     +- - - - - - - - - - - - - - - - - - - - - - - - - -+     |      
             | Unused space (chunk C in tcache so still "in use")|     |     
             +---------------------------------------------------+     |      
-            | Size of chunk C                             |A|M|0|     |      
+            | Size of chunk C                             |A|M|1|     |      
             +---------------------------------------------------+     |   
                                                                       |
             ~                                                   ~     |
@@ -259,7 +259,7 @@ tc bin ->   | Null pointer (no next tcache element)             |  <--
  chunk Y    +- - - - - - - - - - - - - - - - - - - - - - - - - -+             
             | Unused space (chunk X in tcache so still "in use")|           
             +---------------------------------------------------+           
-            | Size of chunk Y                             |A|M|0|            
+            | Size of chunk Y                             |A|M|1|            
             +---------------------------------------------------+           
 ```
 Tcache bins are, for lack of a better term, **dumb**. If chunk B is in the tcache and you overwrite the pointer to the next tcache chunk with your own address, when chunk B gets taken from the top of the tcache, the tcache will think its _new_ head is at the address you overwrote. _It doesn't even check if that address is on the heap_. We can use our overwrite to allocate a chunk anywhere in writeable address space.  
@@ -300,9 +300,9 @@ writing here -> +-----------------------------------------------------+
                 + -    -    -    -    -    -    -    -    -    -    - +         +---------------+     
                 |                                                     |                    
       chunk C   +- - - - - - - - - - - - - - - - - - - - - - - - - - -+            
-                | Unused space (chunk C in tcache so still "in use"   |           
+                | Unused space (chunk B in tcache so still "in use"   |           
                 +-----------------------------------------------------+            
-                | Size of chunk C                               |A|M|P|            
+                | Size of chunk C                               |0|0|1|            
                 +-----------------------------------------------------+
 
                         
