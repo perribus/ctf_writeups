@@ -385,7 +385,7 @@ You can also call `vmmap` in gef to get the base address of the heap and `tele` 
 and *after*:
 ![after](../../images/after.png)
 
-# Let's clobber some Ke$ha songs 
+# Clobbering some poor Ke$ha songs 
 
 So our current goal is to overwrite the file descriptor with 0 so we can read more data into the program, but we've already used up our 1 write. Because the program checks if a song's lyrics pointer is null before reading from its file descriptor, playing song #44 again will just output whatever's at the lyrics pointer.  So even though we can allocate a chunk over `songs[0].fd` we can't write to it. 
 
