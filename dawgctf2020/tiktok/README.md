@@ -188,10 +188,9 @@ Great, we have a heap overflow! The size of the top chunk has been overwritten w
 
 _(If you're already familiar with tcache attacks, or don't really care, you can skip the next two sections)_
 
-Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks it's corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
+Given that this is libc-2.27.so, that means that the heap will have tcache bins. Tcache is a set of 64 singly linked lists, one for increasing chunk sizes up to 1032 (at least for libc-27). When a chunk within this size range gets free, it will end up in its corresponding tcache bin if there's room (each bin holds up to 7 chunks). Conversly, when a chunk in this size range is requested by the program, the heap manager checks its corresponding tcache bin _first_ to see if there's a freed chunk it can use. Tcache was added to improve performance, and as such they removed many of the security checks, which will be useful to us in this challenge. 
 
-[This](https://syedfarazabrar.com/2019-10-12-pico
--2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
+[This](https://syedfarazabrar.com/2019-10-12-pico-2019-heap-challs/) is a great writeup of a tcache attack, which goes into detail on the glibc heap implementation . It also contains some helpful diagrams of heap chunks which I've adapted for this post.
 
 Below is a diagram of an allocated chunk on the heap. The first 16 bytes of a chunk (the first and second row) are part of the chunk's 'header'. If the previous chunk is freed, the first 8 bytes contain the size of the previous chunk. The second 8 bytes then contain the chunk's own size. After the header is where the chunk's data is stored. This is where the address of the chunk begins (and where the pointer returned by malloc will point). When a chunk is allocated, it uses the top 8 bytes of the next chunk's header as part of its data space. 
 
@@ -215,8 +214,7 @@ address of C -> +---------------------------------------------------------------
 
 ```
 
-
-AMP are bits with information on the heap, P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
+AMP are bits with information on the hea; P is the only one we care about: it will get set if the previous chunk is in use (i.e. not freed). However when a freed chunk gets put in a tcache bin, the `P` bit of the next element _still_ remains set. This is so the heap manager will ignore this chunk when it sweeps for free chunks to coalesce (tcache chunks don't get included in coalescing).
 
 When a chunk gets freed and pushed onto the top of a tcache bin (which is a singly linked list), it becomes the new head chunk and stores a pointer the old head chunk of the tcache bin. If a tcache bin has two elements, chunk A and chunk X in it with X as the head element, it may look like this
 
@@ -275,7 +273,7 @@ When we play song #44 we are calling malloc(0). Even though we're asking for 0 b
 ```
 tcache bin 0x20 -> chunk B -> chunk X -> null
 ```
-Next the program reads MAXINT bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section _not the heap_). Specifically we can point it at its file descriptor, `songs[0].fd`. 
+Next the program reads MAXINT bytes from STDIN (fd = 0) into the data section of `chunk A`. We first write 0x10 (16) null bytes into the data section of A. Then we overwrite the next 8 bytes with null bytes. This is technically part of the header of `chunk B` but is used for the data of `chunk A` because this is tcache and `chunk A` is still considered "in use". Then we overwrite the size and AMP bits of `chunk B` with the same bytes that were already there (0x21). Now we've reached the pointer to the next chunk in the tcache bin, which we overwrite with a pointer to the the first song struct in the songs array, `songs[0]` (which is in the `.bss` section _not the heap_). Specifically we can point it at the file descriptor, `songs[0].fd`. 
 
 ```
 
@@ -307,7 +305,7 @@ When we next play a song of size 0 the program will call `malloc(0)` again, and 
 ```
 tcache bin 0x20 ->  0x404078
 ```
-Now when we play anotherr song of size 0, the heap manager will give us 0x404078!
+Now when we play anotherr song of size 0, the heap manager will give us `0x404078`!
 
 ## Now let's use like every gdb add-on ever
 
@@ -358,7 +356,7 @@ chunk A = 0x1ad1290
 chunk B = 0x1ad12b0
 chunk X = 0x1ad15e0
 ```
-It's important to note that because the `.bss` section is part of the binary and there is no PIE, those addresses remain the same. So the address of `songs[0].fd` will always be `0x404078`.
+It's important to note that because the `.bss` section is part of the binary and there is no PIE, the addresses of song structs in the `songs` array remain the same. So the address of `songs[0].fd` will always be `0x404078`.
 
 After we play song #44 and send our data, this is what the heap looks like:
 
