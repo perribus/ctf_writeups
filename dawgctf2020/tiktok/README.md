@@ -378,7 +378,7 @@ You also may notice that gef doesn't like what we've done and can't print out th
 
 Because the heap thinks that `songs[0].fd = 3` is a chunk in the tcache, it thinks that 3 is the next tcache pointer from it. That won't matter to us unless we mess up and try to allocate another chunk of 0x20 without putting more chunks into the 0x20 tcache bin. 
 
-You can also call `vmmap` in gef to get the base address of the heap and `tele` that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like *before* we freed everything: 
+You can also call `vmmap` in gef to get the base address of the heap and `tele` that address to find the actual place in memory where the heap stores the tcache bins (which are at the start of the heap). This is what it looked like *before* we played song #44: 
 
 ![vmmap](../../images/vmmap.png)
 
