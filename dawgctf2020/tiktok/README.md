@@ -315,7 +315,7 @@ Now when we play anothers song of size 0, the heap manager will give us `0x40407
 
 ## Now let's use like every gdb add-on ever
 
-What does this look like within the actual program, using gdb + rr + gef + pwndbg? First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
+What does this look like within the actual program, using gdb + rr + gef + pwngdb? First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. However, by importing just a directory name, we can create songs of 0 bytes. 
 
 ```python
 
@@ -519,7 +519,7 @@ So our game plan going forward is a product of the protections placed on the bin
 
 # "It's a dirty free [hook] for all" - Ke$ha, Take It Off
 
-The GNU C Library (glibc) kindly provides the ability to override the address of malloc(), free() and several other malloc functions. Paraphrased from the [man page](http://man7.org/linux/man-pages/man3/malloc_hook.3.html):
+The GNU C Library (glibc) kindly provides the ability to override the address of malloc(), free() and several other malloc functions. Paraphrased from the [man page](http://man7.org/linux/man-pages/man3/malloc_hook.3.html) :
 
 ```
 Name
