@@ -2,9 +2,9 @@
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
-### Challenge Files
+# Challenge Files
 
-We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
+This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the excellent (Anna)[https://twitter.com/annatea16] We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
 
 +  **`tiktok`**
 
@@ -80,7 +80,7 @@ The first 24 bytes of the struct is a 24 bytes array of the song file path. Dire
 
 Where do the first two pointers get assigned? In lines 30 and 32, with Ke$ha's favorite libc function, [strtok](http://www.cplusplus.com/reference/cstring/strtok/). While my first instinct was to look there for vulnerabilities, that would be a rookie mistake. Clearly the first thing any good CTF player would do in this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
 
-Now that the ambiance is set, we can look at the strtoks. The first strtok scans the `song_file_path` to find a token ending in the `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte afterwhich the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a `.` character, at which point it replaces that `.` with a nullbyte and returns a pointer to the beginning of the song name. 
+Now that the ambiance is set, we can look at the strtoks. The first strtok scans the `song_file_path` to find a token ending in the `/` character. Once done, it replaces that with a null byte, and returns a pointer to the beginning of the token. The second strtok starts at the byte whereafter the last strtok call left off, so in this case the beginning of our song name, and scans until it finds a `.` character, at which point it replaces that `.` with a nullbyte and returns a pointer to the beginning of the song name. 
 
 This is all just a very verbose way of saying that it parses the parent directory and song name into seperate strings, stripping off the '/' and '.txt'.  
 i.e. for `songs[i].song_file_path = "Animal/tiktok.txt"`
