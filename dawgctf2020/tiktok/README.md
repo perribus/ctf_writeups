@@ -4,7 +4,7 @@
 
 # Challenge Files
 
-This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the excellent (Anna)[https://twitter.com/annatea16] We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
+This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). We were given a binary, a libc library and 4 folders (i.e. "albums") with Ke$ha song lyrics inside.  
 
 +  **`tiktok`**
 
