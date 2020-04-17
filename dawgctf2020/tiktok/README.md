@@ -508,15 +508,15 @@ __Luckily the program will very nicely overwrite a file descriptor for us!__ Whe
 
 Then `play_song` will read in 0 bytes of data to this chunk, which neither helps or hurts us.
 
-#### Side Note
+### Side Note
 
 I'm just going to interject here to say that if you're thinking:
 
-> 'But wait, why are you using a song of size 0 to position on the songs array? If you used one of the Kesha songs that was tcache-able, wouldn't that have memset a large amount of bytes to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from stdin rather than from the song's file'
+"But wait, why are you using a song of size 0 to position on the songs array? If you used one of the Kesha songs that was tcache-able, wouldn't that have memset a large amount of bytes to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from stdin rather than from the song's file"
 
 yes thank you so much for your advice, I realize now that would have saved me an extra overwrite. Perhaps I was a little too clever by half with my 0x20 chunks :) 
 
-#### Back to the exploit 
+### Back to the exploit 
 
 Here's the code for this: 
 
