@@ -510,13 +510,7 @@ Then `play_song` will read in `nbytes = 0`, so 0 bytes of data, to this chunk, w
 
 ### Side Note
 
-I'm just going to interject here to say that if you're thinking:
-
-"But wait, why are you choosing a song of _nbytes = 0_ to allocate over the `songs` array? If you used one of the Kesha songs that was hundres of bytes, but still tcache-able, wouldn't that have memset a large amount of bytes in the `songs` array to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from `fd=0` rather than its original fd. This way you get a read from STDIN rather than overwriting everything with Ke$ha lyrics"
-
-first, what's your problem with overwriting things with Ke$ha lyrics that sounds like an ideal scenario
-
-but second, yes thank you so much for your advice, I realize now that would have saved me an extra overwrite. Perhaps I was a little too clever by half with my 0x20 chunks :) 
+In Anna's [exploit](https://github.com/toomanybananas/dawgctf-2020-writeups/blob/master/pwn/tiktok/WRITEUP.md) she does something better here: I could have used one of the Kesha songs that was hundres of bytes long but still tcache-able, rather than choosing a song of _nbytes = 0_ to allocate over the `songs` array. That would have memset a large amount of bytes in the `songs` array to 0, including more than a few file descriptors. If I memset the file descriptor of the song I was currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from STDIN rather than its original fd, which would have resulted in overwriting everything with Ke$ha lyrics. This doesn't make a huge difference but would have saved us an extra overwrite, and made things a little cleaner. Perhaps I was a little too clever by half with my 0x20 chunks :) 
 
 ### Back to the exploit 
 
