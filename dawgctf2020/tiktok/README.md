@@ -412,9 +412,7 @@ tcache bin 0x20 ->  0x404078
 ```
 __Now if we play another song of size 0, the heap manager will give us a chunk at `0x404078`!__
 
-## Now let's use like every gdb add-on ever
-
-What does this look like within the actual program, using `gdb` + `rr` + `gef` + `Pwngdb`? 
+### How do we get Tiktok (the binary, not the hit single) to give us this heap layout?
 
 In order for this attack to work we need to be able to organize our heap so that `chunk A` (0x20 bytes) sits on top of another freed chunk of 0x20 bytes (`chunk B`). To do this we can first allocate some 0x20 bytes chunks and then free them into the 0x20 tcache bin in a specific order. That way we can pop them out in the order we need.  
 
@@ -423,6 +421,12 @@ First we want a way to import and play songs of 0 bytes, which at first didn't s
 **By importing a directory name without a song we can create songs of 0 bytes:** Like we saw with our 44th song, we can succesfully import file names that are just directory paths, such as `"Cannibal/"`. What happens when we call `play_song` on this song however? The`read()` on line 30 of `play_song` will throw an error. _But `play_song` never checks if it returns an error._ `*num` is set to 0 on line 12 of `play_song` so it will remain 0, setting `nbytes` to 0 on line 37 which is what malloc will get called with. 
 
 **Now we have the ability to allocate a ton of 0x20 chunks which will make our tcache attack a breeze (or sleaze as the Queen would say)**
+
+## Now let's use like every gdb add-on ever
+
+What does this look like within the actual program, using `gdb` + `rr` + `gef` + `Pwngdb`? 
+
+
 
 
 ```python
@@ -550,7 +554,7 @@ If we use an overflow of a "Godzilla" freed chunk to put an address of our choos
 
 **We can then point this back into the `songs` array in the `.bss` to overwrite multiple file descriptor fields with 0, giving us the ability to get as many arbitrary writes as we need.**
 
-### Heap Layout 
+### Laying out the heap
 In order to do this we need to organize our heap so that song #44's chunk (`chunk A`) be on top of a freed chunk of 0x20 followed by a freed chunk of 0x310 (the size of a "Godzilla" chunk).
 
 Then we construct a payload that overflows song #44's chunk `chunk A` and overwrites:
