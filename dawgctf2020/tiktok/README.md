@@ -422,7 +422,7 @@ First we want a way to import and play songs of 0 bytes, which at first didn't s
 
 **By importing a directory name without a song we can create songs of 0 bytes:** Like we saw with our 44th song, we can succesfully import file names that are just directory paths, such as `"Cannibal/"`. What happens when we call `play_song` on this song however? The`read()` on line 30 of `play_song` will throw an error. _But `play_song` never checks if it returns an error._ `*num` is set to 0 on line 12 of `play_song` so it will remain 0, setting `nbytes` to 0 on line 37 which is what malloc will get called with. 
 
-**Now we have the ability to allocate a ton of 0x20 chunks which will make our tcache attack a breeze (or sleaze as the Queen would say)**
+**Now we have the ability to allocate a ton of 0x20 chunks which will make our tcache attack a breeze (or sleaze as the Ke$ha would say)**
 
 ## Now let's use like every gdb add-on ever
 
