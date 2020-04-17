@@ -2,11 +2,12 @@
 
 **If you've ever wondered 'Which Ke$ha songs are short enough to fit into a Tcache bin?' this is the challenge for you.**
 
-This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a cool vuln and then makes CTF players wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. 
+This was a 500 pt pwning challenge for UMBC's DawgCTF 2020, written by the always amazing [Anna](https://twitter.com/annatea16). How can you not love a challenge called TikTok that uses `strtok` (haha) to create a cool vuln and then makes CTF players wrestle Ke$ha lyrics into an exploitable heap layout. Sadly I didn't see this challenge until a few hours before the CTF ended so I couldn't finish it in time, but I got the flag after the fact. Anna also has a great [writeup](https://github.com/toomanybananas/dawgctf-2020-writeups/blob/master/pwn/tiktok/WRITEUP.md) of how she solved her own challenge which you should read as well, especially since her exploit differs a bit from mine.
 
 I was originally going to do a quick writeup just because when are you ever going to do a Ke$ha-themed CTF challenge? But I ended up making it more in depth so that someone with little to no pwning or heap experience could understand it well enough to follow along. I also wanted to show _how_ I solved it so they could try it themselves at home. So please forgive the times I may get too in the weeds, or overly explain things :)
 
 However, by reading this you are contractually required to appreciate my Ke$ha puns, sorry no refunds. 
+
 
 # Challenge Files
 
@@ -45,6 +46,7 @@ Before I leave, brush my teeth with a bottle of Jack
 'Cause when I leave for the night, I ain't coming back
 ...
 ```
+
 # Vulnerability
 
 The very first step, and probably the most important part of solving this challenge, is to put on Ke$ha. Personally, I preferred her most recent album for finding the vuln, and her earlier work for exploiting it, but to each their own. 
