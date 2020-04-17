@@ -125,7 +125,14 @@ This functionality becomes very interesting when you realize a few things:
 >>> chr(46)
 '.'
 ```
-We've found the vuln: **if I import a file path of 24 bytes on my 44th import, and my file path contains no `.` character, then `strtok()` will overwrite the song's file descriptor with a nullbyte, i.e. `songs[43].fd = 0`, which is the file descriptor for STDIN.**
+We've found the vuln: **if I import a file path of 24 bytes on my 44th import, and my file path contains no `"."` character, then `strtok()` will overwrite the song's file descriptor with a nullbyte, i.e. `songs[43].fd = 0`, which is the file descriptor for STDIN.**
+
+Importing a file path of 24 bytes with no `"."` character is easy: Even given the constraints on the file path name (must exist, must begin with a capital letter, etc.), we can still import a directory name such as `"Cannibal/"` without specifying a song name. This is a valid path and the `open()` on line 19 of `import_song` will return a fd successfully. Extra `"/"` in a file path make no difference, so we can append as many on the end as we like,
+
+```
+album = "Cannibal"
+vulnerable_file_path = album + "/" * (24-len(album))) 
+```
 
 What can we do with this behavior? We need to look at where the program reads from a song's file descriptor, which is in `play_song` (Option 3). 
 
@@ -409,11 +416,14 @@ __Now if we play another song of size 0, the heap manager will give us a chunk a
 
 What does this look like within the actual program, using `gdb` + `rr` + `gef` + `Pwngdb`? 
 
-In order for this attack to work we need to be able to organize our heap so that `chunk A` (0x20 bytes) sits on top of another freed chunk of 0x20 bytes (`chunk B`). To do this we need to first allocate some 0x20 bytes chunks and then free them into the 0x20 tcache bin in a specific order. That way we can pop them out in the order we need. 
+In order for this attack to work we need to be able to organize our heap so that `chunk A` (0x20 bytes) sits on top of another freed chunk of 0x20 bytes (`chunk B`). To do this we can first allocate some 0x20 bytes chunks and then free them into the 0x20 tcache bin in a specific order. That way we can pop them out in the order we need.  
 
-First we need a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. **However, by importing just a directory name, we can create songs of 0 bytes.** `num[0]` is set to 0 in line 12 of `play_song`. When`read()` is called on the file descriptor in line 30, it never checks whether that read was successful. A `read()` of an fd opened on a directory will return an error but that won't matter because `num[0]` will remain at 0, setting `nbytes` to 0. 
+First we want a way to import and play songs of 0 bytes, which at first didn't seem possible because all available files have at least 700 bytes. NB, there are other ways to exploit this program without using songs of 0 bytes, but it will make things nice and simple. And as luck would have it there's another bug to help us out.   
+
+**By importing a directory name without a song we can create songs of 0 bytes:** Like we saw with our 44th song, we can succesfully import file names that are just directory paths, such as `"Cannibal/"`. What happens when we call `play_song` on this song however? The`read()` on line 30 of `play_song` will throw an error. _But `play_song` never checks if it returns an error._ `*num` is set to 0 on line 12 of `play_song` so it will remain 0, setting `nbytes` to 0 on line 37 which is what malloc will get called with. 
 
 **Now we have the ability to allocate a ton of 0x20 chunks which will make our tcache attack a breeze (or sleaze as the Queen would say)**
+
 
 ```python
 
