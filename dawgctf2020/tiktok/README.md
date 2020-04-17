@@ -508,6 +508,16 @@ __Luckily the program will very nicely overwrite a file descriptor for us!__ Whe
 
 Then `play_song` will read in 0 bytes of data to this chunk, which neither helps or hurts us.
 
+#### Side Note
+
+I'm just going to interject here to say that if you're thinking:
+
+> 'But wait, why are you using a song of size 0 to position on the songs array? If you used one of the Kesha songs that was tcache-able, wouldn't that have memset a large amount of bytes to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from stdin rather than from the song's file'
+
+yes thank you so much for your advice, I realize now that would have saved me an extra overwrite. Perhaps I was a little too clever by half with my 0x20 chunks :) 
+
+#### Back to the exploit 
+
 Here's the code for this: 
 
 
@@ -546,7 +556,7 @@ __We can now send data through STDIN one more time, but we can't write the data 
 This isn't too helpful unless we can control where that heap chunk is. In order to do that we need to amend our strategy:  __we should have corrupted more tcache bins with our overflow so we could use them with this new read from STDIN.__
 
 This can be easily done because our overflow was of an arbitrarily long number of bytes.
-Let's go back and __this time when we overflow let's overwrite more than one chunk.__
+Let's go back to the beginning of our exploit and __this time when we overflow let's overwrite more than one chunk.__
 
 We're already corrupting the tcache bin for 0x20 so we won't be able to exploit it again until we free and overwrite more chunks (which would require us overflowing a second time, which we can't do without using up our new STDIN fd). Thankfully, 0x20 isn't the only tcache bin we can exploit. **A few of Ke$ha's songs are within tcache range, including "Godzilla" from the album Rainbow and the titular song from the album Animal.** 
 
