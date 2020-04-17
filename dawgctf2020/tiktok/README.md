@@ -195,7 +195,7 @@ __Writing Anywhere__
 We can achieve this by tricking the heap into allocating a chunk anywhere we want in the address space. We'll do this by tricking the tcache free lists, which will be explained in detail below. 
 
 __Writing Anything__ 
-Once we can __write anywhere__ we still won't have the ability to write whatever we want. But we can use this __write anywhere__ to put a heap chunk in the `songs` array to overwrite another file descriptor to 0.  Even though we still can't write whatever we want, `play_song` `memset()`s the allocated bytes to 0. 
+Once we can __write anywhere__ we still won't have the ability to write whatever we want. But we can use this __write anywhere__ to put a heap chunk in the `songs` array to overwrite another file descriptor to 0.  Even though we still can't write whatever we want, `play_song` memsets the allocated bytes to 0. 
 
 __Once we have another song with a file descriptor of 0 we can chain this with our ability to allocate a heap chunk anywhere, giving us our desired arbitrary write.__
 
