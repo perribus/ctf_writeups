@@ -506,15 +506,17 @@ __To write anything, we want to overwrite another file descriptor with 0 so we c
 
 __Luckily the program will very nicely overwrite a file descriptor for us!__ When we play any song of size 0 so the program calls `memset()` on exactly 1 byte at the address  returned by malloc (line 37 of `play_song`). **So if `malloc()` gives us a chunk at  `songs[0].fd` the program will overwrite `songs[0].fd = 3` to be `songs[0].fd = 0`!** 
 
-Then `play_song` will read in 0 bytes of data to this chunk, which neither helps or hurts us.
+Then `play_song` will read in `nbytes = 0`, so 0 bytes of data, to this chunk, which neither helps or hurts us.
 
 ### Side Note
 
 I'm just going to interject here to say that if you're thinking:
 
-"But wait, why are you using a song of size 0 to position on the songs array? If you used one of the Kesha songs that was tcache-able, wouldn't that have memset a large amount of bytes to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from stdin rather than from the song's file"
+"But wait, why are you choosing a song of _nbytes = 0_ to allocate over the `songs` array? If you used one of the Kesha songs that was hundres of bytes, but still tcache-able, wouldn't that have memset a large amount of bytes in the `songs` array to 0, including more than a few file descriptors? If you memset the file descriptor of the song you were currently "playing" to 0, then when the `read()` gets called on the next line, the song will read from `fd=0` rather than its original fd. This way you get a read from STDIN rather than overwriting everything with Ke$ha lyrics"
 
-yes thank you so much for your advice, I realize now that would have saved me an extra overwrite. Perhaps I was a little too clever by half with my 0x20 chunks :) 
+first, what's your problem with overwriting things with Ke$ha lyrics that sounds like an ideal scenario
+
+but second, yes thank you so much for your advice, I realize now that would have saved me an extra overwrite. Perhaps I was a little too clever by half with my 0x20 chunks :) 
 
 ### Back to the exploit 
 
