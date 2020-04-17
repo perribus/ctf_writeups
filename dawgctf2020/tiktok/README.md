@@ -516,7 +516,7 @@ In Anna's [exploit](https://github.com/toomanybananas/dawgctf-2020-writeups/blob
 
 ### Back to the exploit 
 
-Here's the code for this: 
+Here's our code so far:
 
 
 ```python
