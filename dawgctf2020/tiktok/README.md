@@ -98,7 +98,7 @@ The file path gets read into a global array of structs called `songs`: this is o
 
 The first 24 bytes of the struct is a 24 bytes array of the song file path, `file_name`. Directly below it is a 4 byte file descripter (fd) that gets assigned when the file path is opened. Below that is 4 bytes of padding, and then 3 pointers. The first pointer will point at the album name (the directory part of the `file_name`) , the second will point at the song name and the third will point into the heap (given intended program behavior). 
 
-Then in lines 34 - 38`file_name` gets parsed and the pointers `album_name` and `song_name` get assigned, using Ke$ha's favorite libc function, [`strtok()`](http://www.cplusplus.com/reference/cstring/strtok/). 
+Then in lines 34 - 38 `file_name` gets parsed, and the pointers `album_name` and `song_name` get assigned, using Ke$ha's favorite libc function, [`strtok()`](http://www.cplusplus.com/reference/cstring/strtok/). 
 
 While my first instinct is to look at `strtok()` for vulnerabilities, given the name of the challenge, that would be a rookie mistake. Clearly the first thing any good CTF player would do in this situation is put on [TikTok](https://www.youtube.com/watch?v=iP6XpLQM2Cs) by Ke$ha.
 
